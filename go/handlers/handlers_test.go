@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"testing"
 	"time"
@@ -43,6 +44,9 @@ func newTestHandler(t *testing.T) (*APIHandler, sqlmock.Sqlmock) {
 	}
 
 	funcMap := template.FuncMap{
+		"pathEscape": func(s string) string {
+			return url.PathEscape(s)
+		},
 		"formatDateTime": func(t time.Time) string {
 			return t.Format("Mon Jan 2, 2006 at 3:04 PM")
 		},
