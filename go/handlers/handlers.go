@@ -2,53 +2,76 @@ package handlers
 
 import (
 	"database/sql"
-	"encoding/json"
+	"html/template"
 	"net/http"
 	"strings"
 
 	"local-pulse/go/db"
+	"local-pulse/go/models"
 )
 
 // APIHandler holds shared dependencies for HTTP handlers.
 type APIHandler struct {
-	DB *sql.DB
+	DB   *sql.DB
+	Tmpl *template.Template
 }
 
-// Events handles GET /events
-func (h *APIHandler) Events(w http.ResponseWriter, r *http.Request) {
+// eventsPageData holds data for the events page.
+type eventsPageData struct {
+	Events       []models.Event
+	ActiveFilter string
+}
+
+// Index handles GET /
+func (h *APIHandler) Index(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
 	events, err := db.ListEvents(h.DB)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(events)
+	data := eventsPageData{Events: events, ActiveFilter: "all"}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := h.Tmpl.ExecuteTemplate(w, "base.html", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
-// EventsToday handles GET /events/today
-func (h *APIHandler) EventsToday(w http.ResponseWriter, r *http.Request) {
+// EventsHTML handles GET /events
+func (h *APIHandler) EventsHTML(w http.ResponseWriter, r *http.Request) {
+	events, err := db.ListEvents(h.DB)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.renderEvents(w, r, events, "all")
+}
+
+// EventsTodayHTML handles GET /events/today
+func (h *APIHandler) EventsTodayHTML(w http.ResponseWriter, r *http.Request) {
 	events, err := db.ListEventsToday(h.DB)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(events)
+	h.renderEvents(w, r, events, "today")
 }
 
-// EventsWeekend handles GET /events/weekend
-func (h *APIHandler) EventsWeekend(w http.ResponseWriter, r *http.Request) {
+// EventsWeekendHTML handles GET /events/weekend
+func (h *APIHandler) EventsWeekendHTML(w http.ResponseWriter, r *http.Request) {
 	events, err := db.ListEventsWeekend(h.DB)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(events)
+	h.renderEvents(w, r, events, "weekend")
 }
 
-// EventsByCategory handles GET /events/category/:category
-func (h *APIHandler) EventsByCategory(w http.ResponseWriter, r *http.Request) {
+// EventsByCategoryHTML handles GET /events/category/:category
+func (h *APIHandler) EventsByCategoryHTML(w http.ResponseWriter, r *http.Request) {
 	category := strings.TrimPrefix(r.URL.Path, "/events/category/")
 	category = strings.Trim(category, "/")
 	if category == "" {
@@ -60,6 +83,22 @@ func (h *APIHandler) EventsByCategory(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(events)
+	h.renderEvents(w, r, events, category)
+}
+
+// renderEvents renders full page or fragment based on HX-Request header.
+func (h *APIHandler) renderEvents(w http.ResponseWriter, r *http.Request, events []models.Event, activeFilter string) {
+	data := eventsPageData{Events: events, ActiveFilter: activeFilter}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	if r.Header.Get("HX-Request") != "" {
+		if err := h.Tmpl.ExecuteTemplate(w, "events_section_inner", data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	if err := h.Tmpl.ExecuteTemplate(w, "base.html", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
