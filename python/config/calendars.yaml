@@ -1,0 +1,10 @@
+calendars:
+  - url: https://downtowncarypark.com/calendar
+    source: "Downtown Cary Park"
+    type: html
+  - url: https://www.visitraleigh.com/event/rss/
+    source: "Visit Raleigh"
+    type: rss
+  - url: https://www.carync.gov/connect-engage/calendar
+    source: "Town of Cary"
+    type: html
