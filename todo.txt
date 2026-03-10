@@ -1,0 +1,167 @@
+### Goal
+
+Build a site that aggregates local events from multiple websites so users do not need to search multiple calendars.
+
+---
+
+## Architecture
+
+Two services sharing one database.
+
+```
+Python Service (data ingestion)
+        |
+        | writes events
+        v
+MySQL
+        ^
+        | reads events
+Go Service (web server + API)
+        |
+Go templates + HTMX
+        |
+Browser
+```
+
+Relevant software:
+
+* MySQL
+* HTMX
+* go-sql-driver/mysql
+
+No direct communication between the Go and Python services. Both read/write through the database.
+
+---
+
+## Service Responsibilities
+
+### Python Service
+
+Purpose: collect and normalize event data.
+
+Tasks:
+
+* Scrape event pages
+* Extract text from calendars
+* Use ChatGPT to convert messy text into structured JSON
+* Insert normalized events into MySQL
+* Deduplicate events
+* Run on a schedule (cron or scheduler)
+
+Typical tools:
+
+* `playwright` or `requests`
+* `beautifulsoup`
+* OpenAI API
+* `sqlalchemy` or MySQL client
+
+---
+
+### Go Service
+
+Purpose: serve the website.
+
+Tasks:
+
+* Query events from MySQL
+* Render pages using Go templates
+* Provide endpoints for filtering events
+* Return HTML fragments for dynamic updates via HTMX
+
+Example endpoints:
+
+```
+/events
+/events/today
+/events/weekend
+/events/category/music
+```
+
+---
+
+## Frontend Approach
+
+Use **server-rendered HTML** instead of a heavy JavaScript framework.
+
+Stack:
+
+* Go `html/template`
+* HTMX for dynamic UI updates
+
+Benefits:
+
+* Very simple architecture
+* Fast pages
+* No Node build pipeline
+* Easy filtering and search
+
+---
+
+## Database Schema (simplified)
+
+Example event table:
+
+```
+events
+------
+id
+title
+description
+start_time
+end_time
+venue
+city
+category
+source
+source_url
+fingerprint
+created_at
+updated_at
+```
+
+Indexes:
+
+* start_time
+* city
+* category
+
+Fingerprint field prevents duplicate events.
+
+---
+
+## Data Flow
+
+```
+scraper runs
+    ↓
+page scraped
+    ↓
+AI normalizes event data
+    ↓
+event stored in MySQL
+    ↓
+Go site queries events
+    ↓
+HTMX updates page sections dynamically
+```
+
+---
+
+## Key Design Decisions
+
+* Avoid microservices complexity.
+* Use **two services only**: ingestion (Python) and web (Go).
+* Share a single database.
+* Keep frontend simple with server rendering.
+* Use AI to normalize event data instead of writing fragile parsers.
+
+---
+
+## Result
+
+A clean system that can easily support:
+
+* dozens of local event sources
+* automated event ingestion
+* fast browsing and filtering
+* minimal infrastructure complexity.
