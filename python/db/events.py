@@ -1,8 +1,8 @@
 """Insert events into MySQL with deduplication."""
 
 import logging
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timedelta
+from typing import Optional, Union
 
 import pymysql
 
@@ -46,6 +46,40 @@ def _format_datetime(dt: Optional[datetime]) -> Optional[str]:
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _normalize_datetime(value: Optional[Union[datetime, str]]) -> Optional[datetime]:
+    """Parse datetime or ISO string to naive UTC datetime for consistent fingerprinting."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        s = str(value).strip()
+        if not s:
+            return None
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        for fmt in (
+            "%Y-%m-%dT%H:%M:%S.%f%z",
+            "%Y-%m-%dT%H:%M:%S%z",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d",
+        ):
+            try:
+                parse_s = s[:10] if fmt == "%Y-%m-%d" else s
+                dt = datetime.strptime(parse_s, fmt)
+                break
+            except ValueError:
+                continue
+        else:
+            logger.warning("Could not parse datetime %r", value)
+            return None
+    if dt.tzinfo:
+        offset = dt.utcoffset() or timedelta(0)
+        dt = (dt.replace(tzinfo=None) - offset)
+    return dt
+
+
 def insert_events(events: list[dict]) -> int:
     """Insert events into the database. Uses ON DUPLICATE KEY UPDATE for fingerprint.
 
@@ -72,14 +106,21 @@ def insert_events(events: list[dict]) -> int:
                     logger.warning("Skipping event missing title or start_time")
                     continue
 
-                start_str = _format_datetime(start_time) if isinstance(start_time, datetime) else str(start_time)
+                start_dt = _normalize_datetime(start_time)
+                if start_dt is None:
+                    logger.warning("Skipping event with unparseable start_time: %r", start_time)
+                    continue
+                start_str = _format_datetime(start_dt)
                 fingerprint = compute_fingerprint(title, start_str, source_url)
+
+                end_dt = _normalize_datetime(evt.get("end_time"))
+                end_str = _format_datetime(end_dt) if end_dt else None
 
                 row = (
                     title,
                     evt.get("description"),
-                    start_time,
-                    evt.get("end_time"),
+                    start_str,
+                    end_str,
                     evt.get("venue"),
                     evt.get("city"),
                     evt.get("category"),

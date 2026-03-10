@@ -112,7 +112,9 @@ func TestIndex_NotFoundForNonRoot(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("Index: status = %d, want 404", rec.Code)
 	}
-	mock.ExpectationsWereMet()
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unfulfilled expectations: %v", err)
+	}
 }
 
 func TestEventsHTML_Returns200(t *testing.T) {

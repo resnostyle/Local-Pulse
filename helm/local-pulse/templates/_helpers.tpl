@@ -29,14 +29,16 @@ helm.sh/chart: {{ include "local-pulse.name" . }}
 app.kubernetes.io/name: {{ include "local-pulse.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | default .Chart.Version | quote }}
 {{- end }}
 
 {{/*
-MySQL host - internal service or external
+MySQL host - internal service or external.
+Bitnami MySQL subchart exposes service as {release}-mysql.
 */}}
 {{- define "local-pulse.mysqlHost" -}}
 {{- if .Values.mysql.enabled }}
-{{- printf "%s-mysql" (include "local-pulse.fullname" .) }}
+{{- printf "%s-mysql" .Release.Name }}
 {{- else }}
 {{- .Values.externalMysql.host }}
 {{- end }}

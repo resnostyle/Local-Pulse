@@ -26,3 +26,7 @@ def test_build_user_prompt_truncates_long_text():
     text = "x" * 20000
     result = build_user_prompt(text, "S", "https://u.com")
     assert len(result) < 20000
+    assert "S" in result
+    assert "https://u.com" in result
+    assert result.startswith("Extract") or "---" in result
+    assert text[:100] in result or "x" in result

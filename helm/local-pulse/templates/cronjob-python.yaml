@@ -38,7 +38,8 @@ spec:
                     name: {{ .Values.existingSecret | default (printf "%s-secrets" (include "local-pulse.fullname" .)) }}
               volumeMounts:
                 - name: calendars
-                  mountPath: /app/config
+                  mountPath: /app/config/calendars.yaml
+                  subPath: calendars.yaml
                   readOnly: true
               resources:
                 {{- toYaml .Values.python.resources | nindent 16 }}

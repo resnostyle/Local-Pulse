@@ -41,7 +41,7 @@
     {{if and (gt .TotalPages 1) .Events}}
     <div class="pagination">
         <span class="pagination-info">
-            Showing {{$start := add (mul (sub .Page 1) .PageSize) 1}}{{if lt $start .TotalCount}}{{$start}}{{else}}{{.TotalCount}}{{end}}–{{$end := mul .Page .PageSize}}{{if lt $end .TotalCount}}{{$end}}{{else}}{{.TotalCount}}{{end}} of {{.TotalCount}} events
+            Showing {{.ShowingStart}}–{{.ShowingEnd}} of {{.TotalCount}} events
         </span>
         <div class="pagination-links">
             {{if gt .Page 1}}

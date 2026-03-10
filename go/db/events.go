@@ -9,6 +9,7 @@ import (
 )
 
 const DefaultPageSize = 20
+const MaxPageSize = 100
 
 // ListCategories returns distinct categories ordered alphabetically.
 func ListCategories(db *sql.DB) ([]string, error) {
@@ -39,6 +40,9 @@ func ListEventsPaginated(db *sql.DB, page, pageSize int) ([]models.Event, int, e
 	if pageSize <= 0 {
 		pageSize = DefaultPageSize
 	}
+	if pageSize > MaxPageSize {
+		pageSize = MaxPageSize
+	}
 	if page < 1 {
 		page = 1
 	}
@@ -64,6 +68,9 @@ func ListEventsToday(db *sql.DB) ([]models.Event, error) {
 func ListEventsTodayPaginated(db *sql.DB, page, pageSize int) ([]models.Event, int, error) {
 	if pageSize <= 0 {
 		pageSize = DefaultPageSize
+	}
+	if pageSize > MaxPageSize {
+		pageSize = MaxPageSize
 	}
 	if page < 1 {
 		page = 1
@@ -92,6 +99,9 @@ func ListEventsWeekendPaginated(db *sql.DB, page, pageSize int) ([]models.Event,
 	if pageSize <= 0 {
 		pageSize = DefaultPageSize
 	}
+	if pageSize > MaxPageSize {
+		pageSize = MaxPageSize
+	}
 	if page < 1 {
 		page = 1
 	}
@@ -117,6 +127,9 @@ func ListEventsByCategory(db *sql.DB, category string) ([]models.Event, error) {
 func ListEventsByCategoryPaginated(db *sql.DB, category string, page, pageSize int) ([]models.Event, int, error) {
 	if pageSize <= 0 {
 		pageSize = DefaultPageSize
+	}
+	if pageSize > MaxPageSize {
+		pageSize = MaxPageSize
 	}
 	if page < 1 {
 		page = 1

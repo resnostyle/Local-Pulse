@@ -58,3 +58,5 @@ class TestFetchHtml:
         call_kwargs = mock_get.call_args[1]
         assert "User-Agent" in call_kwargs["headers"]
         assert "LocalPulse" in call_kwargs["headers"]["User-Agent"]
+        assert "timeout" in call_kwargs
+        assert call_kwargs["timeout"] == 30

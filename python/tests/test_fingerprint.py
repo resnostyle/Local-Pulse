@@ -1,7 +1,5 @@
 """Tests for fingerprint generation."""
 
-import pytest
-
 from db.fingerprint import compute_fingerprint
 
 

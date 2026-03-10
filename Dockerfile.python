@@ -15,4 +15,8 @@ COPY schema/ ./schema/
 # calendars.yaml is required for config
 RUN test -f config/calendars.yaml || (echo "config/calendars.yaml missing" && exit 1)
 
+RUN adduser --disabled-password --gecos "" appuser && \
+    chown -R appuser:appuser /app
+USER appuser
+
 CMD ["python", "main.py", "schedule"]

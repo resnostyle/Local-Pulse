@@ -14,5 +14,6 @@ def compute_fingerprint(title: str, start_time: str, source_url: str) -> str:
     Returns:
         64-char hex string matching VARCHAR(64)
     """
-    payload = f"{title}|{start_time}|{source_url}"
+    # Use length-prefixed fields to avoid collision if inputs contain the delimiter
+    payload = f"{len(title)}:{title}{len(start_time)}:{start_time}{len(source_url)}:{source_url}"
     return hashlib.sha256(payload.encode()).hexdigest()

@@ -21,5 +21,9 @@ COPY --from=builder /server .
 COPY go/templates ./templates
 COPY go/static ./static
 
+RUN adduser -D -g "" appuser && \
+    chown -R appuser:appuser /app
+USER appuser
+
 EXPOSE 8080
 CMD ["./server"]

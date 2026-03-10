@@ -115,6 +115,8 @@ class TestFetchAndParse:
         assert "Event with Starting Date" in titles
         assert all(e["source"] == "Test Source" for e in events)
         assert all("source_url" in e for e in events)
+        # Minimal Event has no pub_date/description dates - should be skipped (no datetime.utcnow fallback)
+        assert "Minimal Event" not in titles
 
     @patch("scraper.rss_handler.requests.get")
     def test_returns_empty_on_fetch_failure(self, mock_get):

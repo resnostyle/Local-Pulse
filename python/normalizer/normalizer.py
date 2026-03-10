@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from openai import OpenAI
@@ -47,6 +47,10 @@ def normalize(text: str, source: dict) -> list[dict]:
         content = response.choices[0].message.content
     except Exception as e:
         logger.warning("OpenAI API error: %s", e)
+        return []
+
+    if content is None:
+        logger.warning("OpenAI returned empty content")
         return []
 
     # Parse JSON (handle markdown code blocks)
@@ -127,10 +131,9 @@ def _parse_iso(s: str) -> Optional[datetime]:
         "%Y-%m-%d",
     ):
         try:
-            parse_str = s[:10] if fmt == "%Y-%m-%d" else s
-            dt = datetime.strptime(parse_str, fmt)
+            parse_s = s[:10] if fmt == "%Y-%m-%d" else s
+            dt = datetime.strptime(parse_s, fmt)
             if hasattr(dt, "tzinfo") and dt.tzinfo:
-                from datetime import timedelta
                 offset = dt.utcoffset() or timedelta(0)
                 dt = (dt.replace(tzinfo=None) - offset)
             return dt

@@ -106,7 +106,8 @@ def fetch_and_parse(url: str, source_name: str) -> list[dict]:
         start_time, end_time = _extract_dates_from_description(description, pub_date)
 
         if not start_time:
-            start_time = pub_date or datetime.utcnow()
+            # Skip entries without a deterministic date to avoid nondeterministic fingerprints
+            continue
 
         categories = entry.get("tags", [])
         category = None

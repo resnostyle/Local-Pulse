@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"html/template"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -26,6 +27,8 @@ type eventsPageData struct {
 	PageSize    int
 	TotalCount  int
 	TotalPages  int
+	ShowingStart int
+	ShowingEnd   int
 	FilterPath  string
 	PageType    string // "index" or "events"
 }
@@ -53,6 +56,8 @@ func (h *APIHandler) Index(w http.ResponseWriter, r *http.Request) {
 		PageSize:     pageSize,
 		TotalCount:   total,
 		TotalPages:   db.TotalPages(total, pageSize),
+		ShowingStart: min((page-1)*pageSize+1, total),
+		ShowingEnd:   min(page*pageSize, total),
 		FilterPath:   "/",
 		PageType:     "index",
 	}
@@ -115,7 +120,7 @@ func (h *APIHandler) EventsByCategoryHTML(w http.ResponseWriter, r *http.Request
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.renderEvents(w, r, events, category, "/events/category/"+category, page, db.DefaultPageSize, total)
+	h.renderEvents(w, r, events, category, "/events/category/"+url.PathEscape(category), page, db.DefaultPageSize, total)
 }
 
 func parsePage(r *http.Request) int {
@@ -138,6 +143,8 @@ func (h *APIHandler) renderEvents(w http.ResponseWriter, r *http.Request, events
 		PageSize:     pageSize,
 		TotalCount:   totalCount,
 		TotalPages:   db.TotalPages(totalCount, pageSize),
+		ShowingStart: min((page-1)*pageSize+1, totalCount),
+		ShowingEnd:   min(page*pageSize, totalCount),
 		FilterPath:   filterPath,
 		PageType:     "events",
 	}

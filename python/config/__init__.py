@@ -1,5 +1,6 @@
 """Configuration for the ingestion service."""
 
+import logging
 import os
 from pathlib import Path
 
@@ -8,8 +9,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
-MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))
+_raw_port = os.getenv("MYSQL_PORT", "3306")
+try:
+    MYSQL_PORT = int(_raw_port)
+except (ValueError, TypeError):
+    logger.warning("Invalid MYSQL_PORT %r, using default 3306", _raw_port)
+    MYSQL_PORT = 3306
 MYSQL_USER = os.getenv("MYSQL_USER", "localpulse")
 MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "localpulse")
 MYSQL_DATABASE = os.getenv("MYSQL_DATABASE", "localpulse")
@@ -27,4 +35,5 @@ def load_calendar_sources() -> list[dict]:
         return []
     with open(config_path) as f:
         data = yaml.safe_load(f)
+    data = data or {}
     return data.get("calendars", [])

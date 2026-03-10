@@ -21,6 +21,13 @@ spec:
         - name: go
           image: "{{ .Values.image.go.repository }}/{{ .Values.image.go.name }}:{{ .Values.image.go.tag }}"
           imagePullPolicy: {{ .Values.image.go.pullPolicy }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           ports:
             - name: http
               containerPort: 8080
@@ -34,9 +41,11 @@ spec:
               value: {{ .Values.mysql.auth.username | default .Values.externalMysql.username | quote }}
             - name: MYSQL_DATABASE
               value: {{ .Values.mysql.auth.database | default .Values.externalMysql.database | quote }}
-          envFrom:
-            - secretRef:
-                name: {{ .Values.existingSecret | default (printf "%s-secrets" (include "local-pulse.fullname" .)) }}
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecret | default (printf "%s-secrets" (include "local-pulse.fullname" .)) }}
+                  key: MYSQL_PASSWORD
           livenessProbe:
             httpGet:
               path: /
