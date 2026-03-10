@@ -43,6 +43,10 @@ run = "cd python && python main.py"
 description = "Install Python dependencies"
 run = "cd python && pip install -r requirements.txt"
 
+[tasks.python-test]
+description = "Run Python unit tests"
+run = "cd python && python -m pytest tests/ -v"
+
 [tasks.go]
 description = "Run Go web server"
 run = "cd go && go run ."

@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"local-pulse/go/db"
@@ -25,11 +26,31 @@ func main() {
 		"formatDateTime": func(t time.Time) string {
 			return t.Format("Mon Jan 2, 2006 at 3:04 PM")
 		},
+		"pageURL": func(filterPath string, page int) string {
+			if page <= 1 {
+				return filterPath
+			}
+			return filterPath + "?page=" + strconv.Itoa(page)
+		},
+		"add": func(a, b int) int { return a + b },
+		"sub": func(a, b int) int { return a - b },
+		"mul": func(a, b int) int { return a * b },
+		"seq": func(start, end int) []int {
+			if start > end {
+				return nil
+			}
+			s := make([]int, end-start+1)
+			for i := range s {
+				s[i] = start + i
+			}
+			return s
+		},
 	}
 	tmpl := template.Must(template.New("").Funcs(funcMap).ParseGlob("templates/*.html"))
 
 	h := &handlers.APIHandler{DB: conn, Tmpl: tmpl}
 	mux := http.NewServeMux()
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 	mux.HandleFunc("/", h.Index)
 	mux.HandleFunc("/events", h.EventsHTML)
 	mux.HandleFunc("/events/today", h.EventsTodayHTML)

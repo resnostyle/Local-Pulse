@@ -1,0 +1,96 @@
+# Default values for local-pulse
+
+# Image settings - set repository to ghcr.io/YOUR_GITHUB_ORG for GHCR
+# e.g. repository: ghcr.io/myorg -> ghcr.io/myorg/local-pulse-go
+image:
+  go:
+    repository: ghcr.io
+    name: local-pulse-go
+    tag: latest
+    pullPolicy: IfNotPresent
+  python:
+    repository: ghcr.io
+    name: local-pulse-python
+    tag: latest
+    pullPolicy: IfNotPresent
+
+# Go web server
+go:
+  replicas: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# Python ingestion (CronJob)
+python:
+  schedule: "0 2 * * 0"  # Sunday 2:00 AM UTC
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+# MySQL - use built-in or external
+mysql:
+  enabled: true
+  auth:
+    rootPassword: ""  # Required: set via existingSecret or override
+    database: localpulse
+    username: ""       # Required when mysql.enabled
+    password: ""      # Required: set via existingSecret or override
+  primary:
+    persistence:
+      enabled: true
+      size: 8Gi
+  # Schema runs at MySQL first boot via initdbScripts (no post-install race)
+  initdbScripts:
+    init.sql: |
+      -- All timestamps are stored in UTC.
+      CREATE TABLE IF NOT EXISTS events (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        title VARCHAR(500) NOT NULL,
+        description TEXT,
+        start_time DATETIME NOT NULL,
+        end_time DATETIME,
+        venue VARCHAR(255),
+        city VARCHAR(100),
+        category VARCHAR(100),
+        source VARCHAR(255),
+        source_url VARCHAR(1000),
+        fingerprint VARCHAR(64) NOT NULL UNIQUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        CONSTRAINT chk_end_after_start CHECK (end_time IS NULL OR end_time >= start_time),
+        INDEX idx_start_time (start_time),
+        INDEX idx_city (city),
+        INDEX idx_category (category)
+      );
+
+# External MySQL (when mysql.enabled: false)
+externalMysql:
+  host: ""
+  port: "3306"
+  database: localpulse
+  username: ""
+  # password from secret
+
+# Secrets - required: provide MYSQL_PASSWORD via existingSecret or chart-created secret
+# kubectl create secret generic local-pulse-secrets --from-literal=MYSQL_PASSWORD=xxx
+existingSecret: ""  # e.g. local-pulse-secrets; required for MYSQL_PASSWORD
+
+# OpenAI (optional - for AI event normalization; only Python CronJob needs it)
+openai:
+  apiKey: ""  # Set via existingSecret OPENAI_API_KEY for Python only
+
+# Ingress
+ingress:
+  enabled: false
+  className: nginx
+  host: localpulse.example.com
+  annotations: {}

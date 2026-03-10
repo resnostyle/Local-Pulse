@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "local-pulse.fullname" . }}-go
+  labels:
+    {{- include "local-pulse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: go
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/component: go
+    app.kubernetes.io/name: {{ include "local-pulse.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}

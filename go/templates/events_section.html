@@ -6,32 +6,63 @@
 
 {{define "events_section_inner"}}
     <nav>
-        <a href="/events" class="{{if eq .ActiveFilter "all"}}active{{end}}"
+        <a href="/" class="{{if and (eq .PageType "index") (eq .ActiveFilter "all")}}active{{end}}"
+           hx-get="/" hx-target="#events-section" hx-swap="innerHTML" hx-push-url="true">Home</a>
+        <a href="/events" class="{{if and (eq .PageType "events") (eq .ActiveFilter "all")}}active{{end}}"
            hx-get="/events" hx-target="#events-section" hx-swap="innerHTML" hx-push-url="true">All</a>
         <a href="/events/today" class="{{if eq .ActiveFilter "today"}}active{{end}}"
            hx-get="/events/today" hx-target="#events-section" hx-swap="innerHTML" hx-push-url="true">Today</a>
         <a href="/events/weekend" class="{{if eq .ActiveFilter "weekend"}}active{{end}}"
            hx-get="/events/weekend" hx-target="#events-section" hx-swap="innerHTML" hx-push-url="true">Weekend</a>
-        <a href="/events/category/music" class="{{if eq .ActiveFilter "music"}}active{{end}}"
-           hx-get="/events/category/music" hx-target="#events-section" hx-swap="innerHTML" hx-push-url="true">Music</a>
+        {{range .Categories}}
+        <a href="/events/category/{{.}}" class="{{if eq $.ActiveFilter .}}active{{end}}"
+           hx-get="/events/category/{{.}}" hx-target="#events-section" hx-swap="innerHTML" hx-push-url="true">{{.}}</a>
+        {{end}}
     </nav>
-    <div id="events-list">
+    <div class="events-list">
         {{if .Events}}
         {{range .Events}}
-        <div class="event-card">
+        <article class="event-card">
             <h2>{{.Title}}</h2>
             <div class="event-meta">
                 <span>{{formatDateTime .StartTime}}</span>
                 {{if .Venue}}<span>{{.Venue}}</span>{{end}}
                 {{if .City}}<span>{{.City}}</span>{{end}}
-                {{if .Category}}<span>{{.Category}}</span>{{end}}
-                {{if .SourceURL}}<a href="{{.SourceURL}}" target="_blank" rel="noopener">Source</a>{{end}}
+                {{if .Category}}<span class="category-pill">{{.Category}}</span>{{end}}
+                {{if .SourceURL}}<a href="{{.SourceURL}}" target="_blank" rel="noopener">Learn more</a>{{end}}
             </div>
-            {{if .Description}}<p>{{.Description}}</p>{{end}}
-        </div>
+            {{if .Description}}<p class="description">{{.Description}}</p>{{end}}
+        </article>
         {{end}}
         {{else}}
         <p class="empty-state">No events found.</p>
         {{end}}
     </div>
+    {{if and (gt .TotalPages 1) .Events}}
+    <div class="pagination">
+        <span class="pagination-info">
+            Showing {{.ShowingStart}}–{{.ShowingEnd}} of {{.TotalCount}} events
+        </span>
+        <div class="pagination-links">
+            {{if gt .Page 1}}
+            <a href="{{pageURL .FilterPath (sub .Page 1)}}" hx-get="{{pageURL .FilterPath (sub .Page 1)}}" hx-target="#events-section" hx-swap="innerHTML" hx-push-url="true">Prev</a>
+            {{else}}
+            <span class="disabled">Prev</span>
+            {{end}}
+            {{$page := .Page}}{{$totalPages := .TotalPages}}{{$path := .FilterPath}}
+            {{range $p := seq 1 $totalPages}}
+            {{if eq $p $page}}
+            <span class="current">{{$p}}</span>
+            {{else}}
+            <a href="{{pageURL $path $p}}" hx-get="{{pageURL $path $p}}" hx-target="#events-section" hx-swap="innerHTML" hx-push-url="true">{{$p}}</a>
+            {{end}}
+            {{end}}
+            {{if lt .Page .TotalPages}}
+            <a href="{{pageURL .FilterPath (add .Page 1)}}" hx-get="{{pageURL .FilterPath (add .Page 1)}}" hx-target="#events-section" hx-swap="innerHTML" hx-push-url="true">Next</a>
+            {{else}}
+            <span class="disabled">Next</span>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
 {{end}}
