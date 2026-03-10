@@ -5,7 +5,7 @@
 
 def main() -> None:
     """Run the ingestion pipeline."""
-    pass
+    raise RuntimeError("Ingestion pipeline not implemented")
 
 
 if __name__ == "__main__":

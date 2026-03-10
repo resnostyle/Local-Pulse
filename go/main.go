@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"local-pulse/go/db"
 	"local-pulse/go/handlers"
@@ -19,12 +20,21 @@ func main() {
 		log.Fatalf("db ping: %v", err)
 	}
 
+	h := &handlers.APIHandler{DB: conn}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/events", handlers.Events)
-	mux.HandleFunc("/events/today", handlers.EventsToday)
-	mux.HandleFunc("/events/weekend", handlers.EventsWeekend)
-	mux.HandleFunc("/events/category/", handlers.EventsByCategory)
+	mux.HandleFunc("/events", h.Events)
+	mux.HandleFunc("/events/today", h.EventsToday)
+	mux.HandleFunc("/events/weekend", h.EventsWeekend)
+	mux.HandleFunc("/events/category/", h.EventsByCategory)
 
+	server := &http.Server{
+		Addr:              ":8080",
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
 	log.Println("Listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	log.Fatal(server.ListenAndServe())
 }
