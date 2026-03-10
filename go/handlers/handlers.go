@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"html/template"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"local-pulse/go/db"
@@ -20,6 +21,13 @@ type APIHandler struct {
 type eventsPageData struct {
 	Events       []models.Event
 	ActiveFilter string
+	Categories   []string
+	Page        int
+	PageSize    int
+	TotalCount  int
+	TotalPages  int
+	FilterPath  string
+	PageType    string // "index" or "events"
 }
 
 // Index handles GET /
@@ -28,13 +36,33 @@ func (h *APIHandler) Index(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	events, err := db.ListEvents(h.DB)
+	// Index shows featured events (first page, limited)
+	page := parsePage(r)
+	pageSize := 12
+	events, total, err := db.ListEventsPaginated(h.DB, page, pageSize)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	data := eventsPageData{Events: events, ActiveFilter: "all"}
+	categories, _ := db.ListCategories(h.DB)
+	data := eventsPageData{
+		Events:       events,
+		ActiveFilter: "all",
+		Categories:   categories,
+		Page:         page,
+		PageSize:     pageSize,
+		TotalCount:   total,
+		TotalPages:   db.TotalPages(total, pageSize),
+		FilterPath:   "/",
+		PageType:     "index",
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if r.Header.Get("HX-Request") != "" {
+		if err := h.Tmpl.ExecuteTemplate(w, "events_section_inner", data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
 	if err := h.Tmpl.ExecuteTemplate(w, "base.html", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -42,32 +70,35 @@ func (h *APIHandler) Index(w http.ResponseWriter, r *http.Request) {
 
 // EventsHTML handles GET /events
 func (h *APIHandler) EventsHTML(w http.ResponseWriter, r *http.Request) {
-	events, err := db.ListEvents(h.DB)
+	page := parsePage(r)
+	events, total, err := db.ListEventsPaginated(h.DB, page, db.DefaultPageSize)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.renderEvents(w, r, events, "all")
+	h.renderEvents(w, r, events, "all", "/events", page, db.DefaultPageSize, total)
 }
 
 // EventsTodayHTML handles GET /events/today
 func (h *APIHandler) EventsTodayHTML(w http.ResponseWriter, r *http.Request) {
-	events, err := db.ListEventsToday(h.DB)
+	page := parsePage(r)
+	events, total, err := db.ListEventsTodayPaginated(h.DB, page, db.DefaultPageSize)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.renderEvents(w, r, events, "today")
+	h.renderEvents(w, r, events, "today", "/events/today", page, db.DefaultPageSize, total)
 }
 
 // EventsWeekendHTML handles GET /events/weekend
 func (h *APIHandler) EventsWeekendHTML(w http.ResponseWriter, r *http.Request) {
-	events, err := db.ListEventsWeekend(h.DB)
+	page := parsePage(r)
+	events, total, err := db.ListEventsWeekendPaginated(h.DB, page, db.DefaultPageSize)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.renderEvents(w, r, events, "weekend")
+	h.renderEvents(w, r, events, "weekend", "/events/weekend", page, db.DefaultPageSize, total)
 }
 
 // EventsByCategoryHTML handles GET /events/category/:category
@@ -78,17 +109,38 @@ func (h *APIHandler) EventsByCategoryHTML(w http.ResponseWriter, r *http.Request
 		http.Error(w, "category is required", http.StatusBadRequest)
 		return
 	}
-	events, err := db.ListEventsByCategory(h.DB, category)
+	page := parsePage(r)
+	events, total, err := db.ListEventsByCategoryPaginated(h.DB, category, page, db.DefaultPageSize)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.renderEvents(w, r, events, category)
+	h.renderEvents(w, r, events, category, "/events/category/"+category, page, db.DefaultPageSize, total)
+}
+
+func parsePage(r *http.Request) int {
+	if p := r.URL.Query().Get("page"); p != "" {
+		if n, err := strconv.Atoi(p); err == nil && n >= 1 {
+			return n
+		}
+	}
+	return 1
 }
 
 // renderEvents renders full page or fragment based on HX-Request header.
-func (h *APIHandler) renderEvents(w http.ResponseWriter, r *http.Request, events []models.Event, activeFilter string) {
-	data := eventsPageData{Events: events, ActiveFilter: activeFilter}
+func (h *APIHandler) renderEvents(w http.ResponseWriter, r *http.Request, events []models.Event, activeFilter, filterPath string, page, pageSize, totalCount int) {
+	categories, _ := db.ListCategories(h.DB)
+	data := eventsPageData{
+		Events:       events,
+		ActiveFilter: activeFilter,
+		Categories:   categories,
+		Page:         page,
+		PageSize:     pageSize,
+		TotalCount:   totalCount,
+		TotalPages:   db.TotalPages(totalCount, pageSize),
+		FilterPath:   filterPath,
+		PageType:     "events",
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	if r.Header.Get("HX-Request") != "" {

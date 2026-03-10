@@ -48,6 +48,7 @@ The site will be available at http://localhost:8080
 | `mise run db-init` | Start MySQL and load schema |
 | `mise run python` | Run Python ingestion service |
 | `mise run python-install` | Install Python dependencies |
+| `mise run python-test` | Run Python unit tests |
 | `mise run go` | Run Go web server |
 | `mise run go-build` | Build Go binary to `go/bin/server` |
 

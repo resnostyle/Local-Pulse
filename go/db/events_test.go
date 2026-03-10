@@ -1,0 +1,208 @@
+package db
+
+import (
+	"database/sql"
+	"testing"
+	"time"
+
+	"github.com/DATA-DOG/go-sqlmock"
+)
+
+func TestTotalPages(t *testing.T) {
+	tests := []struct {
+		name       string
+		totalCount int
+		pageSize   int
+		want       int
+	}{
+		{"zero total returns 1", 0, 20, 1},
+		{"zero pageSize returns 1", 25, 0, 1},
+		{"negative total returns 1", -1, 20, 1},
+		{"negative pageSize returns 1", 25, -5, 1},
+		{"exact fit", 20, 20, 1},
+		{"one extra", 21, 20, 2},
+		{"multiple pages", 100, 20, 5},
+		{"partial last page", 55, 20, 3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := TotalPages(tt.totalCount, tt.pageSize); got != tt.want {
+				t.Errorf("TotalPages(%d, %d) = %d, want %d", tt.totalCount, tt.pageSize, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestListCategories(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	rows := sqlmock.NewRows([]string{"category"}).
+		AddRow("Arts").
+		AddRow("Music").
+		AddRow("Sports")
+	mock.ExpectQuery("SELECT DISTINCT category FROM events").
+		WillReturnRows(rows)
+
+	got, err := ListCategories(db)
+	if err != nil {
+		t.Errorf("ListCategories: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+	want := []string{"Arts", "Music", "Sports"}
+	if len(got) != len(want) {
+		t.Errorf("ListCategories: got %d categories, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("ListCategories[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestListCategories_Empty(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	rows := sqlmock.NewRows([]string{"category"})
+	mock.ExpectQuery("SELECT DISTINCT category FROM events").
+		WillReturnRows(rows)
+
+	got, err := ListCategories(db)
+	if err != nil {
+		t.Errorf("ListCategories: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("ListCategories: got %d categories, want 0", len(got))
+	}
+}
+
+func TestListEventsPaginated(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	// Count query
+	countRows := sqlmock.NewRows([]string{"count"}).AddRow(45)
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM events").
+		WillReturnRows(countRows)
+
+	// List query
+	now := time.Now().UTC()
+	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "fingerprint", "created_at", "updated_at"}).
+		AddRow(1, "Test Event", "Desc", now, now.Add(time.Hour), "Venue A", "Raleigh", "Music", "Source", "https://example.com", "fp1", now, now)
+	mock.ExpectQuery("SELECT id, title, description, start_time").
+		WithArgs(20, 0).
+		WillReturnRows(eventRows)
+
+	events, total, err := ListEventsPaginated(db, 1, 20)
+	if err != nil {
+		t.Errorf("ListEventsPaginated: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+	if total != 45 {
+		t.Errorf("total = %d, want 45", total)
+	}
+	if len(events) != 1 {
+		t.Errorf("len(events) = %d, want 1", len(events))
+	}
+	if events[0].Title != "Test Event" {
+		t.Errorf("events[0].Title = %q, want %q", events[0].Title, "Test Event")
+	}
+}
+
+func TestListEventsPaginated_InvalidPageUsesDefault(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	countRows := sqlmock.NewRows([]string{"count"}).AddRow(0)
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM events").
+		WillReturnRows(countRows)
+
+	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "fingerprint", "created_at", "updated_at"})
+	mock.ExpectQuery("SELECT id, title, description, start_time").
+		WithArgs(DefaultPageSize, 0).
+		WillReturnRows(eventRows)
+
+	_, _, err = ListEventsPaginated(db, 0, 0)
+	if err != nil {
+		t.Errorf("ListEventsPaginated: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+}
+
+func TestListCategories_QueryError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectQuery("SELECT DISTINCT category FROM events").
+		WillReturnError(sql.ErrConnDone)
+
+	_, err = ListCategories(db)
+	if err == nil {
+		t.Error("ListCategories: expected error, got nil")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+}
+
+func TestListEventsByCategoryPaginated(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	countRows := sqlmock.NewRows([]string{"count"}).AddRow(10)
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM events WHERE category = \\?").
+		WithArgs("Music").
+		WillReturnRows(countRows)
+
+	now := time.Now().UTC()
+	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "fingerprint", "created_at", "updated_at"}).
+		AddRow(1, "Concert", nil, now, nil, "Arena", "Cary", "Music", "Visit Raleigh", "https://example.com", "fp1", now, now)
+	mock.ExpectQuery("SELECT id, title, description, start_time").
+		WithArgs("Music", 20, 0).
+		WillReturnRows(eventRows)
+
+	events, total, err := ListEventsByCategoryPaginated(db, "Music", 1, 20)
+	if err != nil {
+		t.Errorf("ListEventsByCategoryPaginated: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+	if total != 10 {
+		t.Errorf("total = %d, want 10", total)
+	}
+	if len(events) != 1 {
+		t.Errorf("len(events) = %d, want 1", len(events))
+	}
+	if events[0].Category == nil || *events[0].Category != "Music" {
+		t.Errorf("events[0].Category = %v, want Music", events[0].Category)
+	}
+}

@@ -3,30 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{block "title" .}}Local Pulse{{end}}</title>
+    <meta name="description" content="Discover local events from Visit Raleigh, Downtown Cary Park, Town of Cary, and more.">
+    <title>{{if eq .PageType "index"}}Local Pulse{{else}}Events | Local Pulse{{end}}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/main.css">
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-    <style>
-        * { box-sizing: border-box; }
-        body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 0; background: #f5f5f5; color: #1a1a1a; line-height: 1.5; }
-        .container { max-width: 720px; margin: 0 auto; padding: 1.5rem; }
-        h1 { font-size: 1.75rem; font-weight: 600; margin: 0 0 1rem; }
-        nav { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid #e0e0e0; }
-        nav a { padding: 0.5rem 0.75rem; text-decoration: none; color: #555; border-radius: 6px; font-size: 0.9rem; }
-        nav a:hover { background: #e8e8e8; color: #1a1a1a; }
-        nav a.active { background: #1a1a1a; color: #fff; }
-        .event-card { background: #fff; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 0.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-        .event-card h2 { font-size: 1.1rem; font-weight: 600; margin: 0 0 0.5rem; }
-        .event-meta { font-size: 0.85rem; color: #666; }
-        .event-meta span { margin-right: 1rem; }
-        .event-meta a { color: #0066cc; }
-        .event-meta a:hover { text-decoration: underline; }
-        .empty-state { text-align: center; padding: 3rem 1rem; color: #666; }
-    </style>
 </head>
 <body>
     <div class="container">
-        <h1>Local Pulse</h1>
-        {{block "content" .}}{{end}}
+        {{if eq .PageType "index"}}{{template "index_content" .}}{{else}}{{template "events_content" .}}{{end}}
+        <footer class="site-footer">
+            Local Pulse — events from Visit Raleigh, Downtown Cary Park, Town of Cary, and more.
+        </footer>
     </div>
 </body>
 </html>
