@@ -1,0 +1,16 @@
+Local Pulse has been deployed.
+
+1. Get the application URL:
+{{- if .Values.ingress.enabled }}
+  http://{{ .Values.ingress.host }}
+{{- else }}
+  export POD_NAME=$(kubectl get pods -l "app.kubernetes.io/component=go" -o jsonpath="{.items[0].metadata.name}")
+  kubectl port-forward $POD_NAME 8080:8080
+  Then visit http://localhost:8080
+{{- end }}
+
+2. The Python ingestion CronJob runs {{ .Values.python.schedule }} (weekly by default).
+
+3. To use GHCR images, set in values:
+   image.go.repository: ghcr.io/YOUR_ORG
+   image.python.repository: ghcr.io/YOUR_ORG

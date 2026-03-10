@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "local-pulse.fullname" . }}-go
+  labels:
+    {{- include "local-pulse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: go
+spec:
+  replicas: {{ .Values.go.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: go
+      {{- include "local-pulse.labels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: go
+        {{- include "local-pulse.labels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: go
+          image: "{{ .Values.image.go.repository }}/{{ .Values.image.go.name }}:{{ .Values.image.go.tag }}"
+          imagePullPolicy: {{ .Values.image.go.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: MYSQL_HOST
+              value: {{ include "local-pulse.mysqlHost" . | quote }}
+            - name: MYSQL_PORT
+              value: {{ include "local-pulse.mysqlPort" . | quote }}
+            - name: MYSQL_USER
+              value: {{ .Values.mysql.auth.username | default .Values.externalMysql.username | quote }}
+            - name: MYSQL_DATABASE
+              value: {{ .Values.mysql.auth.database | default .Values.externalMysql.database | quote }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.existingSecret | default (printf "%s-secrets" (include "local-pulse.fullname" .)) }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.go.resources | nindent 12 }}

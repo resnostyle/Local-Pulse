@@ -1,0 +1,74 @@
+# Default values for local-pulse
+
+# Image settings - set repository to ghcr.io/YOUR_GITHUB_ORG for GHCR
+# e.g. repository: ghcr.io/myorg -> ghcr.io/myorg/local-pulse-go
+image:
+  go:
+    repository: ghcr.io
+    name: local-pulse-go
+    tag: latest
+    pullPolicy: IfNotPresent
+  python:
+    repository: ghcr.io
+    name: local-pulse-python
+    tag: latest
+    pullPolicy: IfNotPresent
+
+# Go web server
+go:
+  replicas: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# Python ingestion (CronJob)
+python:
+  schedule: "0 2 * * 0"  # Sunday 2:00 AM UTC
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+# MySQL - use built-in or external
+mysql:
+  enabled: true
+  auth:
+    rootPassword: "root"
+    database: localpulse
+    username: localpulse
+    password: localpulse
+  primary:
+    persistence:
+      enabled: true
+      size: 8Gi
+  # Schema is applied via initdbScripts - see Chart.yaml
+
+# External MySQL (when mysql.enabled: false)
+externalMysql:
+  host: ""
+  port: 3306
+  database: localpulse
+  username: localpulse
+  # password from secret: local-pulse-mysql
+
+# Secrets - create separately or use existing
+# kubectl create secret generic local-pulse-secrets --from-literal=MYSQL_PASSWORD=xxx --from-literal=OPENAI_API_KEY=xxx
+existingSecret: ""  # e.g. local-pulse-secrets
+
+# OpenAI (optional - for AI event normalization)
+openai:
+  apiKey: ""  # or set via existingSecret OPENAI_API_KEY
+
+# Ingress
+ingress:
+  enabled: false
+  className: nginx
+  host: localpulse.example.com
+  annotations: {}
