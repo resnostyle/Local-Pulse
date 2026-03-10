@@ -1,0 +1,52 @@
+[tools]
+python = "3.11"
+go = "1.21"
+
+[env]
+_.file = ".env"
+
+[tasks.setup]
+description = "Copy .env.example to .env if missing, install Python and Go deps"
+run = """
+if [ ! -f .env ]; then cp .env.example .env && echo "Created .env from .env.example"; fi
+cd python && pip install -r requirements.txt
+cd ../go && go mod tidy
+"""
+
+[tasks.db-up]
+description = "Start MySQL via Docker Compose"
+run = "docker compose up -d"
+
+[tasks.db-down]
+description = "Stop MySQL"
+run = "docker compose down"
+
+[tasks.db-schema]
+description = "Load database schema into MySQL"
+run = "cat schema/init.sql | docker compose exec -T mysql mysql -u localpulse -plocalpulse localpulse"
+
+[tasks.db-init]
+description = "Start MySQL and load schema (db-up + db-schema)"
+run = """
+docker compose up -d
+echo "Waiting for MySQL to be ready..."
+sleep 5
+cat schema/init.sql | docker compose exec -T mysql mysql -u localpulse -plocalpulse localpulse
+echo "Database ready."
+"""
+
+[tasks.python]
+description = "Run Python ingestion service"
+run = "cd python && python main.py"
+
+[tasks.python-install]
+description = "Install Python dependencies"
+run = "cd python && pip install -r requirements.txt"
+
+[tasks.go]
+description = "Run Go web server"
+run = "cd go && go run ."
+
+[tasks.go-build]
+description = "Build Go binary"
+run = "cd go && go build -o bin/server ."
