@@ -1,0 +1,37 @@
+{{define "events_section"}}
+<div id="events-section">
+{{template "events_section_inner" .}}
+</div>
+{{end}}
+
+{{define "events_section_inner"}}
+    <nav>
+        <a href="/events" class="{{if eq .ActiveFilter "all"}}active{{end}}"
+           hx-get="/events" hx-target="#events-section" hx-swap="innerHTML" hx-push-url="true">All</a>
+        <a href="/events/today" class="{{if eq .ActiveFilter "today"}}active{{end}}"
+           hx-get="/events/today" hx-target="#events-section" hx-swap="innerHTML" hx-push-url="true">Today</a>
+        <a href="/events/weekend" class="{{if eq .ActiveFilter "weekend"}}active{{end}}"
+           hx-get="/events/weekend" hx-target="#events-section" hx-swap="innerHTML" hx-push-url="true">Weekend</a>
+        <a href="/events/category/music" class="{{if eq .ActiveFilter "music"}}active{{end}}"
+           hx-get="/events/category/music" hx-target="#events-section" hx-swap="innerHTML" hx-push-url="true">Music</a>
+    </nav>
+    <div id="events-list">
+        {{if .Events}}
+        {{range .Events}}
+        <div class="event-card">
+            <h2>{{.Title}}</h2>
+            <div class="event-meta">
+                <span>{{formatDateTime .StartTime}}</span>
+                {{if .Venue}}<span>{{.Venue}}</span>{{end}}
+                {{if .City}}<span>{{.City}}</span>{{end}}
+                {{if .Category}}<span>{{.Category}}</span>{{end}}
+                {{if .SourceURL}}<a href="{{.SourceURL}}" target="_blank" rel="noopener">Source</a>{{end}}
+            </div>
+            {{if .Description}}<p>{{.Description}}</p>{{end}}
+        </div>
+        {{end}}
+        {{else}}
+        <p class="empty-state">No events found.</p>
+        {{end}}
+    </div>
+{{end}}
