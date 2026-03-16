@@ -36,8 +36,8 @@ echo "Database ready."
 """
 
 [tasks.python]
-description = "Run Python ingestion service"
-run = "cd python && python main.py"
+description = "Run Python ingestion service (one-shot)"
+run = "cd python && python main.py run"
 
 [tasks.python-install]
 description = "Install Python dependencies"
