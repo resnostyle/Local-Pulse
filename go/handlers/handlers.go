@@ -38,7 +38,7 @@ func (h *APIHandler) NotFound(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 	if err := h.Tmpl.ExecuteTemplate(w, "404", nil); err != nil {
 		log.Printf("404 template: %v", err)
-		http.Error(w, "Page not found", http.StatusNotFound)
+		w.Write([]byte("Page not found"))
 	}
 }
 
@@ -49,9 +49,9 @@ func (h *APIHandler) InternalError(w http.ResponseWriter, r *http.Request, err e
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusInternalServerError)
-	if err := h.Tmpl.ExecuteTemplate(w, "500", nil); err != nil {
-		log.Printf("500 template: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	if tplErr := h.Tmpl.ExecuteTemplate(w, "500", nil); tplErr != nil {
+		log.Printf("500 template: %v", tplErr)
+		w.Write([]byte("Internal Server Error"))
 	}
 }
 
