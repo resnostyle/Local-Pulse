@@ -50,7 +50,9 @@ jobs:
             ${{ runner.os }}-pip-3.11-
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          grep -v playwright requirements.txt > requirements-ci.txt
+          python -m pip install -r requirements-ci.txt
         working-directory: python
 
       - name: Run Python tests
