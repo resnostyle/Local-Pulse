@@ -15,8 +15,8 @@
         <a href="/events/weekend" class="{{if eq .ActiveFilter "weekend"}}active{{end}}"
            hx-get="/events/weekend" hx-target="#events-section" hx-swap="innerHTML" hx-push-url="true">Weekend</a>
         {{range .Categories}}
-        <a href="/events/category/{{.}}" class="{{if eq $.ActiveFilter .}}active{{end}}"
-           hx-get="/events/category/{{.}}" hx-target="#events-section" hx-swap="innerHTML" hx-push-url="true">{{.}}</a>
+        <a href="/events/category/{{pathEscape .}}" class="{{if eq $.ActiveFilter .}}active{{end}}"
+           hx-get="/events/category/{{pathEscape .}}" hx-target="#events-section" hx-swap="innerHTML" hx-push-url="true">{{.}}</a>
         {{end}}
     </nav>
     <div class="events-list">

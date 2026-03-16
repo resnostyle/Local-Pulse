@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -23,6 +24,9 @@ func main() {
 	}
 
 	funcMap := template.FuncMap{
+		"pathEscape": func(s string) string {
+			return url.PathEscape(s)
+		},
 		"formatDateTime": func(t time.Time) string {
 			return t.Format("Mon Jan 2, 2006 at 3:04 PM")
 		},
