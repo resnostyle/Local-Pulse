@@ -18,6 +18,8 @@ go/go
 
 # Environment
 .env
+.env.*
+!.env.example
 
 # IDE
 .idea/
