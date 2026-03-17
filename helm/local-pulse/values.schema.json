@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "object",
+      "properties": {
+        "go": {
+          "type": "object",
+          "properties": {
+            "repository": {
+              "type": "string",
+              "description": "Image registry and org (e.g. ghcr.io/YOUR_ORG). Must include org for GHCR.",
+              "pattern": ".*/.*",
+              "minLength": 3
+            }
+          }
+        },
+        "python": {
+          "type": "object",
+          "properties": {
+            "repository": {
+              "type": "string",
+              "description": "Image registry and org (e.g. ghcr.io/YOUR_ORG). Must include org for GHCR.",
+              "pattern": ".*/.*",
+              "minLength": 3
+            }
+          }
+        }
+      }
+    }
+  }
+}

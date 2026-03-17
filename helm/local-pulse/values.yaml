@@ -1,15 +1,16 @@
 # Default values for local-pulse
 
-# Image settings - set repository to ghcr.io/YOUR_GITHUB_ORG for GHCR
-# e.g. repository: ghcr.io/myorg -> ghcr.io/myorg/local-pulse-go
+# Image settings - REQUIRED: set repository to ghcr.io/YOUR_GITHUB_ORG for GHCR
+# GHCR requires images as ghcr.io/owner/repo (e.g. ghcr.io/resnostyle/local-pulse-go)
+# Override: --set image.go.repository=ghcr.io/YOUR_ORG --set image.python.repository=ghcr.io/YOUR_ORG
 image:
   go:
-    repository: ghcr.io
+    repository: ghcr.io/YOUR_GITHUB_ORG
     name: local-pulse-go
     tag: latest
     pullPolicy: IfNotPresent
   python:
-    repository: ghcr.io
+    repository: ghcr.io/YOUR_GITHUB_ORG
     name: local-pulse-python
     tag: latest
     pullPolicy: IfNotPresent
