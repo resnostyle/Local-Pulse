@@ -3,7 +3,7 @@
 import html
 import logging
 from datetime import datetime, timedelta
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 import requests
 
@@ -33,18 +33,28 @@ def _parse_dt(s: str, tz: ZoneInfo = DEFAULT_TZ) -> datetime | None:
     return dt
 
 
-def _event_to_dict(item: dict, source_name: str, venue: str | None, city: str | None) -> dict | None:
+def _event_to_dict(
+    item: dict,
+    source_name: str,
+    venue: str | None,
+    city: str | None,
+    tz: ZoneInfo = DEFAULT_TZ,
+    site_base_url: str | None = None,
+) -> dict | None:
     """Convert NMC API event to our event format."""
     title = html.unescape(item.get("title", "")).strip()
     if not title:
         return None
-    start_dt = _parse_dt(item.get("start", ""))
+    start_dt = _parse_dt(item.get("start", ""), tz=tz)
     if start_dt is None:
         return None
-    end_dt = _parse_dt(item.get("end", ""))
+    end_dt = _parse_dt(item.get("end", ""), tz=tz)
     source_url = item.get("url", "").strip()
     if not source_url:
-        source_url = f"https://downtowncarypark.com/things-to-do/calendar/"
+        if site_base_url:
+            source_url = f"{site_base_url.rstrip('/')}/things-to-do/calendar/"
+        else:
+            source_url = "https://downtowncarypark.com/things-to-do/calendar/"
 
     return {
         "title": title,
@@ -118,11 +128,14 @@ def fetch_nmc_json_events(
         logger.warning("NMC JSON expected list, got %s", type(data).__name__)
         return []
 
+    parsed = urlparse(base_url)
+    site_base_url = f"{parsed.scheme}://{parsed.netloc}"
+
     events = []
     for item in data:
         if not isinstance(item, dict):
             continue
-        evt = _event_to_dict(item, source_name, venue, city)
+        evt = _event_to_dict(item, source_name, venue, city, tz=zone, site_base_url=site_base_url)
         if evt:
             events.append(evt)
 

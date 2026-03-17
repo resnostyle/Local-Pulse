@@ -29,12 +29,12 @@ def _filter_sources(sources: list[dict], only: list[str]) -> list[dict]:
     """Filter sources to those matching --only (by source name or endpoint_id)."""
     if not only:
         return sources
-    only_set = [s.strip().lower() for s in only if s.strip()]
+    only_set = {s.strip().lower() for s in only if s.strip()}
     filtered = []
     for src in sources:
         name = (src.get("source") or "").lower()
         eid = endpoint_id(src).lower()
-        if any(o in name or o in eid for o in only_set):
+        if name in only_set or eid in only_set or any(o in name or o in eid for o in only_set):
             filtered.append(src)
     return filtered
 
@@ -64,7 +64,7 @@ def run_pipeline(only: list[str] | None = None, force: bool = False) -> int:
             source,
             min_interval_seconds=RUN_MIN_INTERVAL_SECONDS,
             force=force,
-        ) as (ok, eid):
+        ) as (ok, _eid):
             if not ok:
                 continue
             try:
@@ -129,9 +129,17 @@ Examples:
                 day_of_week=parts[4],
             )
         else:
+            logger.warning(
+                "SCHEDULE_CRON %r invalid (fewer than 5 parts); using default Sunday 2:00 AM UTC",
+                SCHEDULE_CRON,
+            )
             trigger = CronTrigger(day_of_week="sun", hour=2, minute=0)
         scheduler = BlockingScheduler()
-        scheduler.add_job(run_pipeline, trigger)
+        scheduler.add_job(
+            run_pipeline,
+            trigger,
+            kwargs={"only": args.only, "force": args.force},
+        )
         logger.info("Scheduler started (cron=%s)", SCHEDULE_CRON)
         scheduler.start()
 

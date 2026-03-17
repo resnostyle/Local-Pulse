@@ -112,6 +112,15 @@ func newTestHandler(t *testing.T) (*APIHandler, sqlmock.Sqlmock) {
 	}
 
 	funcMap := template.FuncMap{
+		"derefStr": func(s interface{}) string {
+			if s == nil {
+				return ""
+			}
+			if sp, ok := s.(*string); ok && sp != nil {
+				return *sp
+			}
+			return ""
+		},
 		"pathEscape": func(s string) string {
 			return url.PathEscape(s)
 		},
@@ -148,8 +157,9 @@ func TestIndex_Returns200(t *testing.T) {
 	defer h.DB.Close()
 
 	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	oldNow := db.NowFunc
 	db.NowFunc = func() time.Time { return fixedNow }
-	defer func() { db.NowFunc = func() time.Time { return time.Now().UTC() } }()
+	t.Cleanup(func() { db.NowFunc = oldNow })
 	cutoff := fixedNow.Truncate(24 * time.Hour)
 
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(5)
@@ -202,8 +212,9 @@ func TestEventsHTML_Returns200(t *testing.T) {
 	defer h.DB.Close()
 
 	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	oldNow := db.NowFunc
 	db.NowFunc = func() time.Time { return fixedNow }
-	defer func() { db.NowFunc = func() time.Time { return time.Now().UTC() } }()
+	t.Cleanup(func() { db.NowFunc = oldNow })
 	cutoff := fixedNow.Truncate(24 * time.Hour)
 
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(0)
@@ -239,8 +250,9 @@ func TestEventsHTML_HTMXReturnsFragment(t *testing.T) {
 	defer h.DB.Close()
 
 	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	oldNow := db.NowFunc
 	db.NowFunc = func() time.Time { return fixedNow }
-	defer func() { db.NowFunc = func() time.Time { return time.Now().UTC() } }()
+	t.Cleanup(func() { db.NowFunc = oldNow })
 	cutoff := fixedNow.Truncate(24 * time.Hour)
 
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(0)
@@ -291,8 +303,9 @@ func TestEventsByCategoryHTML_ValidCategory(t *testing.T) {
 	defer h.DB.Close()
 
 	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	oldNow := db.NowFunc
 	db.NowFunc = func() time.Time { return fixedNow }
-	defer func() { db.NowFunc = func() time.Time { return time.Now().UTC() } }()
+	t.Cleanup(func() { db.NowFunc = oldNow })
 	cutoff := fixedNow.Truncate(24 * time.Hour)
 
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(3)
@@ -328,8 +341,9 @@ func TestEventsHTML_HTMXWithPageParam(t *testing.T) {
 	defer h.DB.Close()
 
 	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	oldNow := db.NowFunc
 	db.NowFunc = func() time.Time { return fixedNow }
-	defer func() { db.NowFunc = func() time.Time { return time.Now().UTC() } }()
+	t.Cleanup(func() { db.NowFunc = oldNow })
 	cutoff := fixedNow.Truncate(24 * time.Hour)
 
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(50)
@@ -358,5 +372,125 @@ func TestEventsHTML_HTMXWithPageParam(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("unfulfilled expectations: %v", err)
+	}
+}
+
+func TestEventsTodayHTML_Returns200(t *testing.T) {
+	h, mock := newTestHandler(t)
+	defer h.DB.Close()
+
+	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	oldNow := db.NowFunc
+	db.NowFunc = func() time.Time { return fixedNow }
+	t.Cleanup(func() { db.NowFunc = oldNow })
+	start := fixedNow.Truncate(24 * time.Hour)
+	end := start.Add(24 * time.Hour)
+
+	countRows := sqlmock.NewRows([]string{"count"}).AddRow(0)
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM events WHERE \\(\\(end_time IS NULL AND start_time >= \\?\\) OR \\(end_time IS NOT NULL AND start_time < \\? AND end_time > \\?\\)\\)").
+		WithArgs(start, end, start).
+		WillReturnRows(countRows)
+
+	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "fingerprint", "created_at", "updated_at"})
+	mock.ExpectQuery("SELECT id, title, description, start_time").
+		WithArgs(start, end, start, db.DefaultPageSize, 0).
+		WillReturnRows(eventRows)
+
+	cutoff := fixedNow.Truncate(24 * time.Hour)
+	rows := sqlmock.NewRows([]string{"category"})
+	mock.ExpectQuery("SELECT DISTINCT category FROM events").
+		WithArgs(cutoff, cutoff).
+		WillReturnRows(rows)
+
+	req := httptest.NewRequest(http.MethodGet, "/events/today", nil)
+	rec := httptest.NewRecorder()
+
+	h.EventsTodayHTML(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("EventsTodayHTML: status = %d, want 200", rec.Code)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+}
+
+func TestEventsWeekendHTML_Returns200(t *testing.T) {
+	h, mock := newTestHandler(t)
+	defer h.DB.Close()
+
+	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	oldNow := db.NowFunc
+	db.NowFunc = func() time.Time { return fixedNow }
+	t.Cleanup(func() { db.NowFunc = oldNow })
+	saturday := time.Date(2026, 3, 21, 0, 0, 0, 0, time.UTC)
+	sunday := saturday.Add(48 * time.Hour)
+
+	countRows := sqlmock.NewRows([]string{"count"}).AddRow(0)
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM events WHERE \\(\\(end_time IS NULL AND start_time >= \\?\\) OR \\(end_time IS NOT NULL AND start_time < \\? AND end_time > \\?\\)\\)").
+		WithArgs(saturday, sunday, saturday).
+		WillReturnRows(countRows)
+
+	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "fingerprint", "created_at", "updated_at"})
+	mock.ExpectQuery("SELECT id, title, description, start_time").
+		WithArgs(saturday, sunday, saturday, db.DefaultPageSize, 0).
+		WillReturnRows(eventRows)
+
+	cutoff := fixedNow.Truncate(24 * time.Hour)
+	rows := sqlmock.NewRows([]string{"category"})
+	mock.ExpectQuery("SELECT DISTINCT category FROM events").
+		WithArgs(cutoff, cutoff).
+		WillReturnRows(rows)
+
+	req := httptest.NewRequest(http.MethodGet, "/events/weekend", nil)
+	rec := httptest.NewRecorder()
+
+	h.EventsWeekendHTML(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("EventsWeekendHTML: status = %d, want 200", rec.Code)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+}
+
+func TestAdminHTML_Returns200(t *testing.T) {
+	h, mock := newTestHandler(t)
+	defer h.DB.Close()
+
+	countRows := sqlmock.NewRows([]string{"count"}).AddRow(0)
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM events").
+		WillReturnRows(countRows)
+
+	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "fingerprint", "created_at", "updated_at"})
+	mock.ExpectQuery("SELECT id, title, description, start_time").
+		WithArgs(50, 0).
+		WillReturnRows(eventRows)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+	rec := httptest.NewRecorder()
+
+	h.AdminHTML(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("AdminHTML: status = %d, want 200", rec.Code)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+}
+
+func TestAdminHTML_NotFoundForNonAdmin(t *testing.T) {
+	h, _ := newTestHandler(t)
+	defer h.DB.Close()
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/foo", nil)
+	rec := httptest.NewRecorder()
+
+	h.AdminHTML(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("AdminHTML for /admin/foo: status = %d, want 404", rec.Code)
 	}
 }

@@ -32,6 +32,10 @@ _raw_interval = os.getenv("RUN_MIN_INTERVAL_MINUTES", "60")
 try:
     RUN_MIN_INTERVAL_MINUTES = max(1, int(_raw_interval))
 except (ValueError, TypeError):
+    logger.warning(
+        "Invalid RUN_MIN_INTERVAL_MINUTES %r; using default 60",
+        _raw_interval,
+    )
     RUN_MIN_INTERVAL_MINUTES = 60
 RUN_MIN_INTERVAL_SECONDS = RUN_MIN_INTERVAL_MINUTES * 60
 

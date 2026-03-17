@@ -21,12 +21,25 @@ logger = logging.getLogger(__name__)
 _BASE = Path(__file__).resolve().parent / ".run_guard"
 STATE_FILE = _BASE / "run_state.json"
 LOCK_DIR = _BASE / "locks"
+STATE_LOCK_PATH = _BASE / "state.lock"
 
 DEFAULT_MIN_INTERVAL_SECONDS = 3600  # 1 hour between runs per endpoint
 
 
 def _ensure_dirs() -> None:
+    _BASE.mkdir(parents=True, exist_ok=True)
     LOCK_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _with_state_lock(fn):
+    """Acquire global state lock, run fn(), release. Ensures atomic read-modify-write."""
+    _ensure_dirs()
+    lock = FileLock(STATE_LOCK_PATH)
+    lock.acquire(timeout=10)
+    try:
+        return fn()
+    finally:
+        lock.release()
 
 
 def endpoint_id(source: dict) -> str:
@@ -43,8 +56,8 @@ def endpoint_id(source: dict) -> str:
         try:
             netloc = urlparse(url).netloc
             return re.sub(r"[^a-z0-9_.-]", "", netloc.lower()) or "unknown"
-        except Exception:
-            pass
+        except (ValueError, TypeError) as e:
+            logger.debug("endpoint_id urlparse failed for %r: %s", url, e)
     return "unknown"
 
 
@@ -74,8 +87,12 @@ def should_run(endpoint_id_key: str, min_interval_seconds: float, force: bool = 
     """Return True if we're allowed to run this endpoint (rate limit check)."""
     if force:
         return True
-    state = _load_state()
-    last = state.get(endpoint_id_key)
+
+    def _check():
+        state = _load_state()
+        return state.get(endpoint_id_key)
+
+    last = _with_state_lock(_check)
     if last is None:
         return True
     elapsed = time() - last
@@ -92,9 +109,12 @@ def should_run(endpoint_id_key: str, min_interval_seconds: float, force: bool = 
 
 def record_run(endpoint_id_key: str) -> None:
     """Record that we ran this endpoint (for rate limiting)."""
-    state = _load_state()
-    state[endpoint_id_key] = time()
-    _save_state(state)
+    def _do_record():
+        state = _load_state()
+        state[endpoint_id_key] = time()
+        _save_state(state)
+
+    _with_state_lock(_do_record)
 
 
 def acquire_endpoint_lock(endpoint_id_key: str, timeout: float = 0) -> FileLock | None:

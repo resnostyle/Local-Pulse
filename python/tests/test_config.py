@@ -15,14 +15,17 @@ def test_load_calendar_sources_returns_list():
 
 
 def test_load_calendar_sources_has_expected_structure():
-    """Calendars.yaml should have url, source, type for each entry."""
+    """Calendars.yaml should have source, type for each entry. url required for rss, html, ical, nmc_json."""
     sources = load_calendar_sources()
     assert sources, "calendar config not found - test requires calendars.yaml"
+    valid_types = ("rss", "html", "espn", "ical", "nmc_json")
     for s in sources:
-        assert "url" in s
         assert "source" in s
         assert "type" in s
-        assert s["type"] in ("rss", "html")
+        assert s["type"] in valid_types
+        # rss, html, ical, nmc_json require url; espn does not
+        if s["type"] in ("rss", "html", "ical", "nmc_json"):
+            assert "url" in s
 
 
 def test_load_calendar_sources_missing_file(monkeypatch):

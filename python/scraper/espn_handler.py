@@ -18,8 +18,14 @@ def _load_espn_config() -> dict:
     config_path = Path(__file__).resolve().parent.parent / "config" / "espn.yaml"
     if not config_path.exists():
         return {}
-    with open(config_path) as f:
-        data = yaml.safe_load(f)
+    try:
+        with open(config_path) as f:
+            data = yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        logger.warning("ESPN config YAML parse error: %s", e)
+        return {}
+    if data is None:
+        data = {}
     return data.get("espn", {})
 
 

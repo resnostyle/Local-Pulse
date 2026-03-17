@@ -38,7 +38,7 @@ def _extract_url_from_description(desc: str, base_url: str) -> Optional[str]:
     # Common pattern: URL at start of description
     m = re.search(r"https?://[^\s\)\]\"']+", desc.strip())
     if m:
-        return m.group(0).rstrip(".,;")
+        return m.group(0).rstrip('.,;)]}\'"')
     return None
 
 
@@ -70,9 +70,9 @@ def _event_to_dict(component, source_name: str, base_url: str, venue: Optional[s
     if not source_url and base_url:
         uid = component.get("uid")
         if uid:
-            # CivicEngage style: calendar.aspx?EID=4496
             eid = str(uid).strip()
-            if eid.isdigit():
+            # Only build CivicEngage-style URL for known CivicEngage domains
+            if eid.isdigit() and ("civicengage" in base_url.lower() or "apexnc.org" in base_url or "carync.gov" in base_url):
                 source_url = f"{base_url.rstrip('/')}/calendar.aspx?EID={eid}"
 
     return {
@@ -126,12 +126,8 @@ def fetch_ical_events(
 
     try:
         cal = Calendar.from_ical(ics_text)
-    except Exception as e:
+    except ValueError as e:
         logger.warning("iCal parse failed %s: %s", url, e)
-        return []
-
-    if cal is None:
-        logger.warning("iCal returned empty calendar: %s", url)
         return []
 
     events = []

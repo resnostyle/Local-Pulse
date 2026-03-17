@@ -90,3 +90,10 @@ class TestGetCrawlDelay:
         mock_get.return_value.raise_for_status = lambda: None
 
         assert get_crawl_delay("https://example.com/") == 60.0
+
+    @patch("scraper.fetcher.requests.get")
+    def test_clamps_delay_to_minimum(self, mock_get):
+        mock_get.return_value.text = "Crawl-delay: 0.05\n"
+        mock_get.return_value.raise_for_status = lambda: None
+
+        assert get_crawl_delay("https://example.com/") == 0.1

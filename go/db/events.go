@@ -95,13 +95,16 @@ func ListEventsPaginated(db *sql.DB, page, pageSize int) ([]models.Event, int, e
 	return events, total, nil
 }
 
-// overlapRangeWhere: events overlapping [rangeStart, rangeEnd) — start_time < rangeEnd AND (end_time IS NULL OR end_time > rangeStart)
-const overlapRangeWhere = "start_time < ? AND (end_time IS NULL OR end_time > ?)"
+// overlapRangeWhere: events overlapping [rangeStart, rangeEnd).
+// - end_time IS NULL: point-in-time check (start_time >= rangeStart)
+// - end_time IS NOT NULL: range overlap (start_time < rangeEnd AND end_time > rangeStart)
+// Params: rangeStart, rangeEnd, rangeStart
+const overlapRangeWhere = "(end_time IS NULL AND start_time >= ?) OR (end_time IS NOT NULL AND start_time < ? AND end_time > ?)"
 
 // ListEventsToday returns events happening today (starting today or ongoing through today).
 func ListEventsToday(db *sql.DB) ([]models.Event, error) {
 	start, end := todayRange()
-	return listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, fingerprint, created_at, updated_at FROM events WHERE ("+overlapRangeWhere+") ORDER BY start_time ASC", end, start)
+	return listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, fingerprint, created_at, updated_at FROM events WHERE ("+overlapRangeWhere+") ORDER BY start_time ASC", start, end, start)
 }
 
 // ListEventsTodayPaginated returns today's events (including ongoing) with pagination.
@@ -116,12 +119,12 @@ func ListEventsTodayPaginated(db *sql.DB, page, pageSize int) ([]models.Event, i
 		page = 1
 	}
 	start, end := todayRange()
-	total, err := countEvents(db, "SELECT COUNT(*) FROM events WHERE ("+overlapRangeWhere+")", end, start)
+	total, err := countEvents(db, "SELECT COUNT(*) FROM events WHERE ("+overlapRangeWhere+")", start, end, start)
 	if err != nil {
 		return nil, 0, err
 	}
 	offset := (page - 1) * pageSize
-	events, err := listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, fingerprint, created_at, updated_at FROM events WHERE ("+overlapRangeWhere+") ORDER BY start_time ASC LIMIT ? OFFSET ?", end, start, pageSize, offset)
+	events, err := listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, fingerprint, created_at, updated_at FROM events WHERE ("+overlapRangeWhere+") ORDER BY start_time ASC LIMIT ? OFFSET ?", start, end, start, pageSize, offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -131,7 +134,7 @@ func ListEventsTodayPaginated(db *sql.DB, page, pageSize int) ([]models.Event, i
 // ListEventsWeekend returns events happening this weekend (starting or ongoing).
 func ListEventsWeekend(db *sql.DB) ([]models.Event, error) {
 	saturday, sunday := weekendRange()
-	return listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, fingerprint, created_at, updated_at FROM events WHERE ("+overlapRangeWhere+") ORDER BY start_time ASC", sunday, saturday)
+	return listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, fingerprint, created_at, updated_at FROM events WHERE ("+overlapRangeWhere+") ORDER BY start_time ASC", saturday, sunday, saturday)
 }
 
 // ListEventsWeekendPaginated returns weekend events (including ongoing) with pagination.
@@ -146,12 +149,12 @@ func ListEventsWeekendPaginated(db *sql.DB, page, pageSize int) ([]models.Event,
 		page = 1
 	}
 	saturday, sunday := weekendRange()
-	total, err := countEvents(db, "SELECT COUNT(*) FROM events WHERE ("+overlapRangeWhere+")", sunday, saturday)
+	total, err := countEvents(db, "SELECT COUNT(*) FROM events WHERE ("+overlapRangeWhere+")", saturday, sunday, saturday)
 	if err != nil {
 		return nil, 0, err
 	}
 	offset := (page - 1) * pageSize
-	events, err := listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, fingerprint, created_at, updated_at FROM events WHERE ("+overlapRangeWhere+") ORDER BY start_time ASC LIMIT ? OFFSET ?", sunday, saturday, pageSize, offset)
+	events, err := listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, fingerprint, created_at, updated_at FROM events WHERE ("+overlapRangeWhere+") ORDER BY start_time ASC LIMIT ? OFFSET ?", saturday, sunday, saturday, pageSize, offset)
 	if err != nil {
 		return nil, 0, err
 	}

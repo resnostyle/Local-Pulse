@@ -8,8 +8,20 @@ from scraper.scraper import fetch_events_for_source
 
 
 class TestFetchEventsForSource:
-    def test_missing_url_returns_empty(self):
+    def test_missing_url_returns_empty_for_rss(self):
         result = fetch_events_for_source({"source": "X", "type": "rss"})
+        assert result == []
+
+    def test_missing_url_returns_empty_for_ical(self):
+        result = fetch_events_for_source({"source": "Town of Apex", "type": "ical"})
+        assert result == []
+
+    def test_missing_url_returns_empty_for_nmc_json(self):
+        result = fetch_events_for_source({"source": "Downtown Cary Park", "type": "nmc_json"})
+        assert result == []
+
+    def test_missing_url_returns_empty_for_html(self):
+        result = fetch_events_for_source({"source": "X", "type": "html"})
         assert result == []
 
     @patch("scraper.scraper.fetch_rss")

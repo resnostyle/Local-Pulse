@@ -3,11 +3,11 @@
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from run_guard import endpoint_id, record_run, should_run
+from run_guard import acquire_endpoint_lock, endpoint_id, record_run, run_guard, should_run
 
 
 class TestEndpointId:
@@ -56,3 +56,84 @@ class TestRecordRun:
             data = json.loads(state_file.read_text())
             assert "espn" in data
             assert isinstance(data["espn"], (int, float))
+
+
+class TestAcquireEndpointLock:
+    def test_acquires_lock_when_available(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lock_dir = Path(tmp) / "locks"
+            lock_dir.mkdir()
+            with patch("run_guard.LOCK_DIR", lock_dir):
+                lock = acquire_endpoint_lock("test_endpoint", timeout=0)
+            assert lock is not None
+            lock.release()
+
+    def test_returns_none_when_lock_held(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lock_dir = Path(tmp) / "locks"
+            lock_dir.mkdir()
+            with patch("run_guard.LOCK_DIR", lock_dir):
+                first = acquire_endpoint_lock("contended", timeout=0)
+                assert first is not None
+                second = acquire_endpoint_lock("contended", timeout=0)
+                assert second is None
+                first.release()
+
+
+class TestRunGuard:
+    def test_yields_true_when_should_run(self):
+        with patch("run_guard._load_state", return_value={}), patch(
+            "run_guard.acquire_endpoint_lock"
+        ) as mock_acquire:
+            mock_lock = MagicMock()
+            mock_acquire.return_value = mock_lock
+            with patch("run_guard.STATE_FILE", Path("/tmp/run_state.json")), patch(
+                "run_guard.LOCK_DIR", Path("/tmp/locks")
+            ):
+                with run_guard({"source": "ESPN"}, min_interval_seconds=3600, force=False) as (
+                    ok,
+                    eid,
+                ):
+                    assert ok is True
+                    assert eid == "espn"
+            mock_lock.release.assert_called()
+
+    def test_yields_false_when_rate_limited(self):
+        import time
+
+        with patch("run_guard._load_state", return_value={"espn": time.time() - 60}):
+            with run_guard({"source": "ESPN"}, min_interval_seconds=3600, force=False) as (
+                ok,
+                eid,
+            ):
+                assert ok is False
+                assert eid == "espn"
+
+    def test_yields_false_when_lock_unavailable(self):
+        with patch("run_guard._load_state", return_value={}), patch(
+            "run_guard.acquire_endpoint_lock", return_value=None
+        ):
+            with run_guard({"source": "ESPN"}, min_interval_seconds=3600, force=False) as (
+                ok,
+                eid,
+            ):
+                assert ok is False
+                assert eid == "espn"
+
+    def test_force_bypasses_rate_limit_and_runs(self):
+        import time
+
+        with patch("run_guard._load_state", return_value={"espn": time.time() - 60}), patch(
+            "run_guard.acquire_endpoint_lock"
+        ) as mock_acquire:
+            mock_lock = MagicMock()
+            mock_acquire.return_value = mock_lock
+            with patch("run_guard.STATE_FILE", Path("/tmp/run_state.json")), patch(
+                "run_guard.LOCK_DIR", Path("/tmp/locks")
+            ):
+                with run_guard({"source": "ESPN"}, min_interval_seconds=3600, force=True) as (
+                    ok,
+                    eid,
+                ):
+                    assert ok is True
+                    assert eid == "espn"

@@ -120,35 +120,35 @@ def _enrich_visitraleigh_event(event: dict, crawl_delay: float = 0.3) -> None:
             headers={"User-Agent": USER_AGENT},
         )
         resp.raise_for_status()
+        times = _extract_times_from_visitraleigh_page(resp.text)
+        if not times:
+            return
+        (start_h, start_m), end_times = times
+        # Apply time to start_date in Raleigh's local timezone, then convert to UTC
+        local_dt = start_dt.replace(
+            hour=start_h, minute=start_m, second=0, microsecond=0, tzinfo=RALEIGH_TZ
+        )
+        utc_dt = local_dt.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
+        event["start_time"] = utc_dt
+        if end_times:
+            end_h, end_m = end_times
+            # Use start date for end time (covers same-day events; multi-day events keep original end_date)
+            base_date = start_dt
+            if event.get("end_time") and isinstance(event["end_time"], datetime):
+                end_dt = event["end_time"]
+                if end_dt.date() == start_dt.date():
+                    base_date = end_dt
+            local_end = base_date.replace(
+                hour=end_h, minute=end_m, second=0, microsecond=0, tzinfo=RALEIGH_TZ
+            )
+            # Overnight events (e.g. 11pm-1am): end time is next calendar day
+            if local_end <= local_dt:
+                local_end += timedelta(days=1)
+            event["end_time"] = local_end.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
     except requests.RequestException as e:
         logger.debug("Could not fetch event page %s: %s", url, e)
-        return
-    times = _extract_times_from_visitraleigh_page(resp.text)
-    if not times:
-        return
-    (start_h, start_m), end_times = times
-    # Apply time to start_date in Raleigh's local timezone, then convert to UTC
-    local_dt = start_dt.replace(
-        hour=start_h, minute=start_m, second=0, microsecond=0, tzinfo=RALEIGH_TZ
-    )
-    utc_dt = local_dt.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
-    event["start_time"] = utc_dt
-    if end_times:
-        end_h, end_m = end_times
-        # Use start date for end time (covers same-day events; multi-day events keep original end_date)
-        base_date = start_dt
-        if event.get("end_time") and isinstance(event["end_time"], datetime):
-            end_dt = event["end_time"]
-            if end_dt.date() == start_dt.date():
-                base_date = end_dt
-        local_end = base_date.replace(
-            hour=end_h, minute=end_m, second=0, microsecond=0, tzinfo=RALEIGH_TZ
-        )
-        # Overnight events (e.g. 11pm-1am): end time is next calendar day
-        if local_end <= local_dt:
-            local_end += timedelta(days=1)
-        event["end_time"] = local_end.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
-    _time.sleep(crawl_delay)
+    finally:
+        _time.sleep(crawl_delay)
 
 
 def _strip_html(text: str) -> str:
