@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"html/template"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -31,6 +32,29 @@ func (h *APIHandler) Health(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
+// NotFound serves the custom 404 page.
+func (h *APIHandler) NotFound(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusNotFound)
+	if err := h.Tmpl.ExecuteTemplate(w, "404", nil); err != nil {
+		log.Printf("404 template: %v", err)
+		w.Write([]byte("Page not found"))
+	}
+}
+
+// InternalError serves the custom 500 page.
+func (h *APIHandler) InternalError(w http.ResponseWriter, r *http.Request, err error) {
+	if err != nil {
+		log.Printf("Internal error: %v", err)
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusInternalServerError)
+	if tplErr := h.Tmpl.ExecuteTemplate(w, "500", nil); tplErr != nil {
+		log.Printf("500 template: %v", tplErr)
+		w.Write([]byte("Internal Server Error"))
+	}
+}
+
 // eventsPageData holds data for the events page.
 type eventsPageData struct {
 	Events       []models.Event
@@ -49,7 +73,7 @@ type eventsPageData struct {
 // Index handles GET /
 func (h *APIHandler) Index(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
-		http.NotFound(w, r)
+		h.NotFound(w, r)
 		return
 	}
 	// Index shows featured events (first page, limited)
@@ -57,7 +81,7 @@ func (h *APIHandler) Index(w http.ResponseWriter, r *http.Request) {
 	pageSize := 12
 	events, total, err := db.ListEventsPaginated(h.DB, page, pageSize)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.InternalError(w, r, err)
 		return
 	}
 	categories, _ := db.ListCategories(h.DB)
@@ -77,12 +101,12 @@ func (h *APIHandler) Index(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if r.Header.Get("HX-Request") != "" {
 		if err := h.Tmpl.ExecuteTemplate(w, "events_section_inner", data); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			h.InternalError(w, r, err)
 		}
 		return
 	}
 	if err := h.Tmpl.ExecuteTemplate(w, "base.html", data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.InternalError(w, r, err)
 	}
 }
 
@@ -91,7 +115,7 @@ func (h *APIHandler) EventsHTML(w http.ResponseWriter, r *http.Request) {
 	page := parsePage(r)
 	events, total, err := db.ListEventsPaginated(h.DB, page, db.DefaultPageSize)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.InternalError(w, r, err)
 		return
 	}
 	h.renderEvents(w, r, events, "all", "/events", page, db.DefaultPageSize, total)
@@ -102,7 +126,7 @@ func (h *APIHandler) EventsTodayHTML(w http.ResponseWriter, r *http.Request) {
 	page := parsePage(r)
 	events, total, err := db.ListEventsTodayPaginated(h.DB, page, db.DefaultPageSize)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.InternalError(w, r, err)
 		return
 	}
 	h.renderEvents(w, r, events, "today", "/events/today", page, db.DefaultPageSize, total)
@@ -113,7 +137,7 @@ func (h *APIHandler) EventsWeekendHTML(w http.ResponseWriter, r *http.Request) {
 	page := parsePage(r)
 	events, total, err := db.ListEventsWeekendPaginated(h.DB, page, db.DefaultPageSize)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.InternalError(w, r, err)
 		return
 	}
 	h.renderEvents(w, r, events, "weekend", "/events/weekend", page, db.DefaultPageSize, total)
@@ -130,7 +154,7 @@ func (h *APIHandler) EventsByCategoryHTML(w http.ResponseWriter, r *http.Request
 	page := parsePage(r)
 	events, total, err := db.ListEventsByCategoryPaginated(h.DB, category, page, db.DefaultPageSize)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.InternalError(w, r, err)
 		return
 	}
 	h.renderEvents(w, r, events, category, "/events/category/"+url.PathEscape(category), page, db.DefaultPageSize, total)
@@ -165,12 +189,12 @@ func (h *APIHandler) renderEvents(w http.ResponseWriter, r *http.Request, events
 
 	if r.Header.Get("HX-Request") != "" {
 		if err := h.Tmpl.ExecuteTemplate(w, "events_section_inner", data); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			h.InternalError(w, r, err)
 		}
 		return
 	}
 
 	if err := h.Tmpl.ExecuteTemplate(w, "base.html", data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.InternalError(w, r, err)
 	}
 }
