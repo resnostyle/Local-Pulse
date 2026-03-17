@@ -72,7 +72,8 @@ class TestEventToDict:
             "links": [{"rel": ["summary"], "href": "https://espn.com/game/401234"}],
             "status": {"type": {"description": "Scheduled"}},
         }
-        result = _event_to_dict(event, "ESPN")
+        config = {"game_url_template": "https://www.espn.com/game/_/gameId/{id}"}
+        result = _event_to_dict(event, "ESPN", config)
         assert result is not None
         assert result["title"] == "Hornets vs Celtics"
         assert result["start_time"] == datetime(2026, 3, 20, 19, 0, 0)
@@ -90,7 +91,7 @@ class TestEventToDict:
             "links": [],
             "status": {},
         }
-        result = _event_to_dict(event, "ESPN")
+        result = _event_to_dict(event, "ESPN", {"game_url_template": "https://example.com/game/{id}"})
         assert result is not None
         assert result["start_time"] == datetime(2026, 3, 20, 19, 0, 0)
 
@@ -101,7 +102,7 @@ class TestEventToDict:
             "links": [],
             "status": {},
         }
-        assert _event_to_dict(event, "ESPN") is None
+        assert _event_to_dict(event, "ESPN", {}) is None
 
     def test_returns_none_for_missing_date(self):
         event = {
@@ -110,7 +111,7 @@ class TestEventToDict:
             "links": [],
             "status": {},
         }
-        assert _event_to_dict(event, "ESPN") is None
+        assert _event_to_dict(event, "ESPN", {}) is None
 
     def test_builds_source_url_from_id_when_no_links(self):
         event = {
@@ -121,7 +122,8 @@ class TestEventToDict:
             "links": [],
             "status": {},
         }
-        result = _event_to_dict(event, "ESPN")
+        config = {"game_url_template": "https://www.espn.com/game/_/gameId/{id}"}
+        result = _event_to_dict(event, "ESPN", config)
         assert result is not None
         assert "401234" in result["source_url"]
 
@@ -141,6 +143,7 @@ class TestFetchEspnEvents:
     @patch("scraper.espn_handler._load_espn_config")
     def test_fetches_and_filters_events(self, mock_load, mock_get):
         mock_load.return_value = {
+            "api_base_url": "https://site.api.espn.com/apis/site/v2/sports",
             "state_code": "NC",
             "team_locations": ["Charlotte"],
             "leagues": [{"sport": "basketball", "league": "nba"}],

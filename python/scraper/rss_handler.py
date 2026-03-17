@@ -21,7 +21,7 @@ USER_AGENT = (
     "Mozilla/5.0 (compatible; LocalPulse/1.0; +https://github.com/localpulse)"
 )
 
-# Visit Raleigh embeds dates like "01/05/2026 to 03/31/2026" or "Starting 03/09/2026"
+# Common RSS patterns: "01/05/2026 to 03/31/2026" or "Starting 03/09/2026"
 DATE_RANGE_RE = re.compile(
     r"(\d{1,2}/\d{1,2}/\d{4})\s+to\s+(\d{1,2}/\d{1,2}/\d{4})",
     re.IGNORECASE,
@@ -93,8 +93,8 @@ def _parse_times_str(s: str) -> Optional[tuple[tuple[int, int], Optional[tuple[i
     return (start_h, start_m), None
 
 
-def _extract_times_from_visitraleigh_page(html: str) -> Optional[tuple[tuple[int, int], Optional[tuple[int, int]]]]:
-    """Extract start/end time from Visit Raleigh event page HTML."""
+def _extract_times_from_event_page(html: str) -> Optional[tuple[tuple[int, int], Optional[tuple[int, int]]]]:
+    """Extract start/end time from event page HTML (looks for li.times span.value structure)."""
     soup = BeautifulSoup(html, "html.parser")
     for li in soup.find_all("li", class_=lambda c: c and "times" in str(c).lower()):
         val = li.find("span", class_=lambda c: c and "value" in str(c).lower())
@@ -105,10 +105,13 @@ def _extract_times_from_visitraleigh_page(html: str) -> Optional[tuple[tuple[int
     return _parse_times_str(m.group(1).strip()) if m else None
 
 
-def _enrich_visitraleigh_event(event: dict, crawl_delay: float = 0.3) -> None:
-    """Fetch event detail page and update start_time/end_time with actual times."""
+def _enrich_event_with_times(event: dict, tz: ZoneInfo = RALEIGH_TZ, crawl_delay: float = 0.3) -> None:
+    """Fetch event detail page and update start_time/end_time if page has times (li.times span.value)."""
     url = event.get("source_url")
-    if not url or "visitraleigh.com/event/" not in url:
+    if not url:
+        return
+    # Only attempt for URLs that look like event detail pages (common pattern across many sites)
+    if "/event/" not in url and "/events/" not in url:
         return
     start_dt = event.get("start_time")
     if not start_dt or not isinstance(start_dt, datetime):
@@ -120,13 +123,13 @@ def _enrich_visitraleigh_event(event: dict, crawl_delay: float = 0.3) -> None:
             headers={"User-Agent": USER_AGENT},
         )
         resp.raise_for_status()
-        times = _extract_times_from_visitraleigh_page(resp.text)
+        times = _extract_times_from_event_page(resp.text)
         if not times:
             return
         (start_h, start_m), end_times = times
-        # Apply time to start_date in Raleigh's local timezone, then convert to UTC
+        # Apply time to start_date in local timezone, then convert to UTC
         local_dt = start_dt.replace(
-            hour=start_h, minute=start_m, second=0, microsecond=0, tzinfo=RALEIGH_TZ
+            hour=start_h, minute=start_m, second=0, microsecond=0, tzinfo=tz
         )
         utc_dt = local_dt.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
         event["start_time"] = utc_dt
@@ -138,7 +141,7 @@ def _enrich_visitraleigh_event(event: dict, crawl_delay: float = 0.3) -> None:
             else:
                 base_date = start_dt
             local_end = base_date.replace(
-                hour=end_h, minute=end_m, second=0, microsecond=0, tzinfo=RALEIGH_TZ
+                hour=end_h, minute=end_m, second=0, microsecond=0, tzinfo=tz
             )
             # Overnight events (e.g. 11pm-1am): end time is next calendar day
             if local_end <= local_dt:
@@ -180,7 +183,7 @@ def _extract_dates_from_description(description: str, pub_date: Optional[datetim
     return None, None
 
 
-def fetch_and_parse(url: str, source_name: str) -> list[dict]:
+def fetch_and_parse(url: str, source_name: str, tz: str = "America/New_York") -> list[dict]:
     """Fetch RSS feed and parse into event dicts.
 
     Uses conditional fetch (ETag/Last-Modified) when available to skip
@@ -188,7 +191,8 @@ def fetch_and_parse(url: str, source_name: str) -> list[dict]:
 
     Args:
         url: RSS feed URL
-        source_name: Human-readable source name (e.g. "Visit Raleigh")
+        source_name: Human-readable source name
+        tz: Timezone for parsing times from detail pages (default America/New_York)
 
     Returns:
         List of event dicts with keys: title, description, start_time, end_time,
@@ -247,11 +251,16 @@ def fetch_and_parse(url: str, source_name: str) -> list[dict]:
             "recurring": recurring,
         })
 
-    # Enrich Visit Raleigh events with actual times from detail pages
-    if source_name == "Visit Raleigh" and events:
-        crawl_delay = get_crawl_delay(events[0].get("source_url", "https://www.visitraleigh.com/"))
+    # Enrich events with times from detail pages when structure matches (li.times span.value)
+    if events:
+        sample_url = events[0].get("source_url", url)
+        crawl_delay = get_crawl_delay(sample_url)
+        try:
+            zone = ZoneInfo(tz) if tz else RALEIGH_TZ
+        except KeyError:
+            zone = RALEIGH_TZ
         for evt in events:
-            _enrich_visitraleigh_event(evt, crawl_delay)
+            _enrich_event_with_times(evt, tz=zone, crawl_delay=crawl_delay)
 
     logger.info("Parsed %d events from RSS %s", len(events), url)
     return events
