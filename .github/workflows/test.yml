@@ -53,6 +53,7 @@ jobs:
         run: |
           grep -v playwright requirements.txt > requirements-ci.txt
           python -m pip install -r requirements-ci.txt
+          python -m pip install pytest pytest-mock
         working-directory: python
 
       - name: Run Python tests
