@@ -22,13 +22,14 @@
     <div class="events-list">
         {{if .Events}}
         {{range .Events}}
-        <article class="event-card">
+        <article class="event-card{{if eq (derefStr .Category) "Sports"}} sports{{end}}">
             <h2>{{.Title}}</h2>
             <div class="event-meta">
                 <span>{{formatDateTime .StartTime}}</span>
                 {{if .Venue}}<span>{{.Venue}}</span>{{end}}
                 {{if .City}}<span>{{.City}}</span>{{end}}
                 {{if .Category}}<span class="category-pill">{{.Category}}</span>{{end}}
+                {{if .Recurring}}<span class="category-pill recurring">Recurring</span>{{end}}
                 {{if .SourceURL}}<a href="{{.SourceURL}}" target="_blank" rel="noopener">Learn more</a>{{end}}
             </div>
             {{if .Description}}<p class="description">{{.Description}}</p>{{end}}

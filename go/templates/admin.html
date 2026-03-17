@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin | Local Pulse</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/main.css">
+    <style>
+        .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--color-border); }
+        .admin-header h1 { margin: 0; font-size: 1.5rem; }
+        .admin-header a { color: var(--color-accent); text-decoration: none; }
+        .admin-header a:hover { text-decoration: underline; }
+        .admin-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        .admin-table th, .admin-table td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+        .admin-table th { background: var(--color-surface); font-weight: 600; color: var(--color-text-muted); }
+        .admin-table tr:hover td { background: rgba(0,0,0,0.02); }
+        .admin-table .col-id { width: 3rem; }
+        .admin-table .col-title { max-width: 200px; }
+        .admin-table .col-desc { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .admin-table .col-date { white-space: nowrap; }
+        .admin-table .col-source { font-size: 0.85rem; }
+        .admin-pagination { margin-top: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+        .admin-pagination a { color: var(--color-accent); text-decoration: none; }
+        .admin-pagination a:hover { text-decoration: underline; }
+        .admin-pagination .disabled { color: var(--color-text-muted); }
+        .admin-container { max-width: 1400px; margin: 0 auto; padding: 1.5rem; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <div class="admin-header">
+            <h1>Admin — All Events</h1>
+            <a href="/">← Back to site</a>
+        </div>
+
+        <p style="color: var(--color-text-muted); margin-bottom: 1rem;">
+            Showing {{.ShowingStart}}–{{.ShowingEnd}} of {{.TotalCount}} events (includes past)
+        </p>
+
+        {{if .Events}}
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th class="col-id">ID</th>
+                    <th class="col-title">Title</th>
+                    <th class="col-desc">Description</th>
+                    <th class="col-date">Start</th>
+                    <th class="col-date">End</th>
+                    <th>Venue</th>
+                    <th>City</th>
+                    <th>Category</th>
+                    <th class="col-source">Source</th>
+                    <th>Link</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Events}}
+                <tr>
+                    <td>{{.ID}}</td>
+                    <td>{{.Title}}</td>
+                    <td class="col-desc" title="{{if .Description}}{{.Description}}{{end}}">{{if .Description}}{{.Description}}{{else}}—{{end}}</td>
+                    <td class="col-date">{{formatDateTime .StartTime}}</td>
+                    <td class="col-date">{{if .EndTime}}{{formatDateTime .EndTime}}{{else}}—{{end}}</td>
+                    <td>{{if .Venue}}{{.Venue}}{{else}}—{{end}}</td>
+                    <td>{{if .City}}{{.City}}{{else}}—{{end}}</td>
+                    <td>{{if .Category}}{{.Category}}{{else}}—{{end}}</td>
+                    <td class="col-source">{{if .Source}}{{.Source}}{{else}}—{{end}}</td>
+                    <td>{{if .SourceURL}}<a href="{{.SourceURL}}" target="_blank" rel="noopener">View</a>{{else}}—{{end}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+
+        {{if gt .TotalPages 1}}
+        <div class="admin-pagination">
+            <span>
+                {{if gt .Page 1}}
+                <a href="/admin?page={{sub .Page 1}}">← Prev</a>
+                {{else}}
+                <span class="disabled">← Prev</span>
+                {{end}}
+                &nbsp; Page {{.Page}} of {{.TotalPages}} &nbsp;
+                {{if lt .Page .TotalPages}}
+                <a href="/admin?page={{add .Page 1}}">Next →</a>
+                {{else}}
+                <span class="disabled">Next →</span>
+                {{end}}
+            </span>
+        </div>
+        {{end}}
+        {{else}}
+        <p class="empty-state">No events in database.</p>
+        {{end}}
+    </div>
+</body>
+</html>

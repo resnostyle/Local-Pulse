@@ -143,6 +143,45 @@ func (h *APIHandler) EventsWeekendHTML(w http.ResponseWriter, r *http.Request) {
 	h.renderEvents(w, r, events, "weekend", "/events/weekend", page, db.DefaultPageSize, total)
 }
 
+// AdminHTML handles GET /admin - shows all events (no date filter).
+func (h *APIHandler) AdminHTML(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/admin" {
+		h.NotFound(w, r)
+		return
+	}
+	page := parsePage(r)
+	pageSize := 50
+	events, total, err := db.ListAllEventsPaginated(h.DB, page, pageSize)
+	if err != nil {
+		h.InternalError(w, r, err)
+		return
+	}
+	data := adminPageData{
+		Events:       events,
+		Page:         page,
+		PageSize:     pageSize,
+		TotalCount:   total,
+		TotalPages:   db.TotalPages(total, pageSize),
+		ShowingStart: min((page-1)*pageSize+1, total),
+		ShowingEnd:   min(page*pageSize, total),
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := h.Tmpl.ExecuteTemplate(w, "admin.html", data); err != nil {
+		h.InternalError(w, r, err)
+	}
+}
+
+// adminPageData holds data for the admin page.
+type adminPageData struct {
+	Events       []models.Event
+	Page         int
+	PageSize     int
+	TotalCount   int
+	TotalPages   int
+	ShowingStart int
+	ShowingEnd   int
+}
+
 // EventsByCategoryHTML handles GET /events/category/:category
 func (h *APIHandler) EventsByCategoryHTML(w http.ResponseWriter, r *http.Request) {
 	category := strings.TrimPrefix(r.URL.Path, "/events/category/")

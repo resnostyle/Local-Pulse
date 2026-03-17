@@ -102,6 +102,7 @@ def _normalize_event(item: dict, source_name: str, source_url: str) -> Optional[
     def _str(v) -> Optional[str]:
         return str(v).strip() or None if v is not None else None
 
+    recurring = bool(item.get("recurring"))
     return {
         "title": title.strip(),
         "description": description,
@@ -112,6 +113,7 @@ def _normalize_event(item: dict, source_name: str, source_url: str) -> Optional[
         "category": _str(item.get("category")),
         "source": source_name,
         "source_url": source_url,
+        "recurring": recurring,
     }
 
 

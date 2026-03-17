@@ -13,6 +13,7 @@ type Event struct {
 	Category    *string
 	Source      *string
 	SourceURL   *string
+	Recurring   bool
 	Fingerprint *string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time

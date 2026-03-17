@@ -118,6 +118,10 @@ nav a.active {
   border-color: var(--color-border-focus);
 }
 
+.event-card.sports {
+  border-left: 3px solid var(--color-accent);
+}
+
 .event-card h2 {
   font-size: 1.15rem;
   font-weight: 600;
@@ -148,6 +152,11 @@ nav a.active {
   border-radius: var(--radius-sm);
   font-size: 0.8rem;
   font-weight: 500;
+}
+
+.event-meta .category-pill.recurring {
+  background: rgba(100, 116, 139, 0.15);
+  color: var(--color-text-muted);
 }
 
 .event-meta a {
