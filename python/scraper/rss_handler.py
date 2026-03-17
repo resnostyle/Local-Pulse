@@ -132,12 +132,11 @@ def _enrich_visitraleigh_event(event: dict, crawl_delay: float = 0.3) -> None:
         event["start_time"] = utc_dt
         if end_times:
             end_h, end_m = end_times
-            # Use start date for end time (covers same-day events; multi-day events keep original end_date)
-            base_date = start_dt
             if event.get("end_time") and isinstance(event["end_time"], datetime):
                 end_dt = event["end_time"]
-                if end_dt.date() == start_dt.date():
-                    base_date = end_dt
+                base_date = end_dt if end_dt.date() != start_dt.date() else start_dt
+            else:
+                base_date = start_dt
             local_end = base_date.replace(
                 hour=end_h, minute=end_m, second=0, microsecond=0, tzinfo=RALEIGH_TZ
             )
@@ -184,6 +183,9 @@ def _extract_dates_from_description(description: str, pub_date: Optional[datetim
 def fetch_and_parse(url: str, source_name: str) -> list[dict]:
     """Fetch RSS feed and parse into event dicts.
 
+    Uses conditional fetch (ETag/Last-Modified) when available to skip
+    parsing when the feed has not changed.
+
     Args:
         url: RSS feed URL
         source_name: Human-readable source name (e.g. "Visit Raleigh")
@@ -192,18 +194,13 @@ def fetch_and_parse(url: str, source_name: str) -> list[dict]:
         List of event dicts with keys: title, description, start_time, end_time,
         venue, city, category, source, source_url
     """
-    try:
-        resp = requests.get(
-            url,
-            timeout=DEFAULT_TIMEOUT,
-            headers={"User-Agent": USER_AGENT},
-        )
-        resp.raise_for_status()
-    except requests.RequestException as e:
-        logger.warning("Failed to fetch RSS %s: %s", url, e)
+    from .fetcher import fetch_with_conditional
+
+    content = fetch_with_conditional(url, timeout=DEFAULT_TIMEOUT, user_agent=USER_AGENT)
+    if content is None:
         return []
 
-    feed = feedparser.parse(resp.content)
+    feed = feedparser.parse(content)
     events = []
 
     for entry in feed.entries:
@@ -230,6 +227,13 @@ def fetch_and_parse(url: str, source_name: str) -> list[dict]:
             cat = categories[0] if isinstance(categories[0], str) else categories[0].get("term", "")
             category = cat.strip() if cat else None
 
+        recurring = bool(
+            description
+            and any(
+                kw in description.lower()
+                for kw in ("recurring", "repeats", "repeats weekly", "repeats monthly", "every week", "every month")
+            )
+        )
         events.append({
             "title": title,
             "description": description[:5000] if description else None,
@@ -240,6 +244,7 @@ def fetch_and_parse(url: str, source_name: str) -> list[dict]:
             "category": category,
             "source": source_name,
             "source_url": link,
+            "recurring": recurring,
         })
 
     # Enrich Visit Raleigh events with actual times from detail pages

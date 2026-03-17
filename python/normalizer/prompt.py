@@ -10,6 +10,7 @@ Output a JSON array of objects. Each object must have these fields:
 - venue (string, optional)
 - city (string, optional)
 - category (string, optional)
+- recurring (boolean, optional): true if the event repeats (e.g. weekly, monthly)
 
 Return ONLY valid JSON. No markdown, no explanation. If no events found, return []."""
 

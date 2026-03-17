@@ -49,8 +49,11 @@ class TestRecordRun:
             base = Path(tmp)
             state_file = base / "run_state.json"
             lock_dir = base / "locks"
+            state_lock = base / "state.lock"
             lock_dir.mkdir()
-            with patch("run_guard.STATE_FILE", state_file), patch("run_guard.LOCK_DIR", lock_dir):
+            with patch("run_guard.STATE_FILE", state_file), patch(
+                "run_guard.LOCK_DIR", lock_dir
+            ), patch("run_guard.STATE_LOCK_PATH", state_lock):
                 record_run("espn")
             assert state_file.exists()
             data = json.loads(state_file.read_text())
@@ -82,21 +85,26 @@ class TestAcquireEndpointLock:
 
 class TestRunGuard:
     def test_yields_true_when_should_run(self):
-        with patch("run_guard._load_state", return_value={}), patch(
-            "run_guard.acquire_endpoint_lock"
-        ) as mock_acquire:
-            mock_lock = MagicMock()
-            mock_acquire.return_value = mock_lock
-            with patch("run_guard.STATE_FILE", Path("/tmp/run_state.json")), patch(
-                "run_guard.LOCK_DIR", Path("/tmp/locks")
-            ):
-                with run_guard({"source": "ESPN"}, min_interval_seconds=3600, force=False) as (
-                    ok,
-                    eid,
-                ):
-                    assert ok is True
-                    assert eid == "espn"
-            mock_lock.release.assert_called()
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            lock_dir = base / "locks"
+            state_lock = base / "state.lock"
+            lock_dir.mkdir()
+            with patch("run_guard._load_state", return_value={}), patch(
+                "run_guard.acquire_endpoint_lock"
+            ) as mock_acquire:
+                mock_lock = MagicMock()
+                mock_acquire.return_value = mock_lock
+                with patch("run_guard.STATE_FILE", base / "run_state.json"), patch(
+                    "run_guard.LOCK_DIR", lock_dir
+                ), patch("run_guard.STATE_LOCK_PATH", state_lock):
+                    with run_guard({"source": "ESPN"}, min_interval_seconds=3600, force=False) as (
+                        ok,
+                        eid,
+                    ):
+                        assert ok is True
+                        assert eid == "espn"
+                mock_lock.release.assert_called()
 
     def test_yields_false_when_rate_limited(self):
         import time
@@ -123,17 +131,22 @@ class TestRunGuard:
     def test_force_bypasses_rate_limit_and_runs(self):
         import time
 
-        with patch("run_guard._load_state", return_value={"espn": time.time() - 60}), patch(
-            "run_guard.acquire_endpoint_lock"
-        ) as mock_acquire:
-            mock_lock = MagicMock()
-            mock_acquire.return_value = mock_lock
-            with patch("run_guard.STATE_FILE", Path("/tmp/run_state.json")), patch(
-                "run_guard.LOCK_DIR", Path("/tmp/locks")
-            ):
-                with run_guard({"source": "ESPN"}, min_interval_seconds=3600, force=True) as (
-                    ok,
-                    eid,
-                ):
-                    assert ok is True
-                    assert eid == "espn"
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            lock_dir = base / "locks"
+            state_lock = base / "state.lock"
+            lock_dir.mkdir()
+            with patch("run_guard._load_state", return_value={"espn": time.time() - 60}), patch(
+                "run_guard.acquire_endpoint_lock"
+            ) as mock_acquire:
+                mock_lock = MagicMock()
+                mock_acquire.return_value = mock_lock
+                with patch("run_guard.STATE_FILE", base / "run_state.json"), patch(
+                    "run_guard.LOCK_DIR", lock_dir
+                ), patch("run_guard.STATE_LOCK_PATH", state_lock):
+                    with run_guard({"source": "ESPN"}, min_interval_seconds=3600, force=True) as (
+                        ok,
+                        eid,
+                    ):
+                        assert ok is True
+                        assert eid == "espn"

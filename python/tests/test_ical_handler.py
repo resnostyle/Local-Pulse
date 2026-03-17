@@ -108,10 +108,11 @@ class TestEventToDict:
 
 
 class TestFetchIcalEvents:
-    @patch("scraper.ical_handler.requests.get")
+    @patch("scraper.fetcher.requests.get")
     def test_parses_ical_feed(self, mock_get):
         mock_get.return_value.status_code = 200
         mock_get.return_value.text = SAMPLE_ICS
+        mock_get.return_value.headers = {}
         mock_get.return_value.raise_for_status = lambda: None
 
         events = fetch_ical_events(
@@ -127,7 +128,7 @@ class TestFetchIcalEvents:
         assert "Another Event" in titles
         assert all(e["source"] == "Town of Apex" for e in events)
 
-    @patch("scraper.ical_handler.requests.get")
+    @patch("scraper.fetcher.requests.get")
     def test_returns_empty_on_fetch_failure(self, mock_get):
         import requests
 
@@ -136,16 +137,17 @@ class TestFetchIcalEvents:
         events = fetch_ical_events("https://example.com/calendar.ics", "Test")
         assert events == []
 
-    @patch("scraper.ical_handler.requests.get")
+    @patch("scraper.fetcher.requests.get")
     def test_returns_empty_on_parse_failure(self, mock_get):
         mock_get.return_value.status_code = 200
         mock_get.return_value.text = "not valid ical"
+        mock_get.return_value.headers = {}
         mock_get.return_value.raise_for_status = lambda: None
 
         events = fetch_ical_events("https://example.com/bad.ics", "Test")
         assert events == []
 
-    @patch("scraper.ical_handler.requests.get")
+    @patch("scraper.fetcher.requests.get")
     def test_deduplicates_by_uid(self, mock_get):
         dup_ics = """BEGIN:VCALENDAR
 VERSION:2.0
@@ -163,6 +165,7 @@ END:VCALENDAR
 """
         mock_get.return_value.status_code = 200
         mock_get.return_value.text = dup_ics
+        mock_get.return_value.headers = {}
         mock_get.return_value.raise_for_status = lambda: None
 
         events = fetch_ical_events("https://example.com/dup.ics", "Test")

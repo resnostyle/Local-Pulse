@@ -1,6 +1,6 @@
 """Tests for database events module."""
 
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock, patch
 
 from db.events import _format_datetime, _normalize_datetime, insert_events
@@ -132,6 +132,17 @@ class TestNormalizeDatetime:
     def test_invalid_returns_none(self):
         assert _normalize_datetime("invalid") is None
         assert _normalize_datetime("") is None
+
+    def test_timezone_aware_datetime_converts_to_utc_naive(self):
+        dt = datetime(2026, 3, 15, 19, 0, 0, tzinfo=timezone(timedelta(hours=5)))
+        result = _normalize_datetime(dt)
+        assert result == datetime(2026, 3, 15, 14, 0, 0)
+        assert result.tzinfo is None
+
+    def test_iso_with_offset_normalizes_to_utc(self):
+        result = _normalize_datetime("2026-03-15T19:00:00+05:00")
+        assert result == datetime(2026, 3, 15, 14, 0, 0)
+        assert result.tzinfo is None
 
 
 class TestFormatDatetime:

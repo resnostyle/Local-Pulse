@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 INSERT_SQL = """
 INSERT INTO events (
     title, description, start_time, end_time, venue, city, category,
-    source, source_url, fingerprint
-) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    source, source_url, recurring, fingerprint
+) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 ON DUPLICATE KEY UPDATE
     title = VALUES(title),
     description = VALUES(description),
@@ -23,6 +23,7 @@ ON DUPLICATE KEY UPDATE
     venue = VALUES(venue),
     city = VALUES(city),
     category = VALUES(category),
+    recurring = VALUES(recurring),
     updated_at = CURRENT_TIMESTAMP
 """
 
@@ -116,6 +117,7 @@ def insert_events(events: list[dict]) -> int:
                 end_dt = _normalize_datetime(evt.get("end_time"))
                 end_str = _format_datetime(end_dt) if end_dt else None
 
+                recurring = bool(evt.get("recurring", False))
                 row = (
                     title,
                     evt.get("description"),
@@ -126,6 +128,7 @@ def insert_events(events: list[dict]) -> int:
                     evt.get("category"),
                     evt.get("source"),
                     source_url,
+                    1 if recurring else 0,
                     fingerprint,
                 )
                 try:

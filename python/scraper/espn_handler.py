@@ -24,8 +24,8 @@ def _load_espn_config() -> dict:
     except yaml.YAMLError as e:
         logger.warning("ESPN config YAML parse error: %s", e)
         return {}
-    if data is None:
-        data = {}
+    if data is None or not isinstance(data, dict):
+        return {}
     return data.get("espn", {})
 
 
@@ -99,6 +99,7 @@ def _event_to_dict(event: dict, source_name: str) -> dict | None:
             "category": "Sports",
             "source": source_name,
             "source_url": source_url,
+            "recurring": False,
         }
     except (KeyError, ValueError) as e:
         logger.debug("Skip ESPN event %s: %s", event.get("id"), e)
@@ -144,15 +145,17 @@ def fetch_espn_events(source_name: str = "ESPN") -> list[dict]:
 
         events = data.get("events", [])
         for evt in events:
-            eid = evt.get("id", "")
-            if eid in seen_ids:
-                continue
             if not _is_nc_event(evt, config):
                 continue
-            seen_ids.add(eid)
             out = _event_to_dict(evt, source_name)
-            if out:
-                all_events.append(out)
+            if out is None:
+                continue
+            eid = evt.get("id", "")
+            if eid and eid in seen_ids:
+                continue
+            if eid:
+                seen_ids.add(eid)
+            all_events.append(out)
 
     logger.info("Parsed %d NC sports events from ESPN", len(all_events))
     return all_events

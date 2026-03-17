@@ -1,11 +1,10 @@
 """Fetch events from NMC-style JSON API (e.g. Downtown Cary Park)."""
 
 import html
+import json
 import logging
 from datetime import datetime, timedelta
 from urllib.parse import urlencode, urlparse
-
-import requests
 
 from zoneinfo import ZoneInfo
 
@@ -56,6 +55,7 @@ def _event_to_dict(
         else:
             source_url = "https://downtowncarypark.com/things-to-do/calendar/"
 
+    recurring = bool(item.get("recurring") or item.get("recurrence") or item.get("rrule"))
     return {
         "title": title,
         "description": None,
@@ -66,6 +66,7 @@ def _event_to_dict(
         "category": None,
         "source": source_name,
         "source_url": source_url,
+        "recurring": recurring,
     }
 
 
@@ -92,7 +93,7 @@ def fetch_nmc_json_events(
     """
     try:
         zone = ZoneInfo(tz)
-    except Exception:
+    except KeyError:
         zone = DEFAULT_TZ
 
     now = datetime.now(zone)
@@ -109,17 +110,14 @@ def fetch_nmc_json_events(
     params = {"cb": "3", "start": start_iso, "end": end_iso}
     url = f"{base_url.rstrip('/')}?{urlencode(params)}"
 
-    try:
-        resp = requests.get(
-            url,
-            timeout=DEFAULT_TIMEOUT,
-            headers={"User-Agent": USER_AGENT},
-        )
-        resp.raise_for_status()
-        data = resp.json()
-    except requests.RequestException as e:
-        logger.warning("NMC JSON fetch failed %s: %s", url, e)
+    from .fetcher import fetch_with_conditional
+
+    content = fetch_with_conditional(url, timeout=DEFAULT_TIMEOUT, user_agent=USER_AGENT)
+    if content is None:
         return []
+
+    try:
+        data = json.loads(content)
     except ValueError as e:
         logger.warning("NMC JSON parse failed %s: %s", url, e)
         return []

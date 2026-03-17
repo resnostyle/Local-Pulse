@@ -4,7 +4,13 @@ from unittest.mock import patch
 
 import pytest
 
-from scraper.fetcher import DEFAULT_CRAWL_DELAY, extract_text, fetch_html, get_crawl_delay
+from scraper.fetcher import (
+    DEFAULT_CRAWL_DELAY,
+    extract_text,
+    fetch_html,
+    fetch_with_conditional,
+    get_crawl_delay,
+)
 
 
 class TestExtractText:
@@ -35,7 +41,9 @@ class TestExtractText:
 class TestFetchHtml:
     @patch("scraper.fetcher.requests.get")
     def test_returns_html_on_success(self, mock_get):
+        mock_get.return_value.status_code = 200
         mock_get.return_value.text = "<html><body>Hello</body></html>"
+        mock_get.return_value.headers = {}
         mock_get.return_value.raise_for_status = lambda: None
 
         result = fetch_html("https://example.com")
@@ -51,7 +59,9 @@ class TestFetchHtml:
 
     @patch("scraper.fetcher.requests.get")
     def test_passes_user_agent(self, mock_get):
+        mock_get.return_value.status_code = 200
         mock_get.return_value.text = "OK"
+        mock_get.return_value.headers = {}
         mock_get.return_value.raise_for_status = lambda: None
 
         fetch_html("https://example.com")
@@ -60,6 +70,17 @@ class TestFetchHtml:
         assert "LocalPulse" in call_kwargs["headers"]["User-Agent"]
         assert "timeout" in call_kwargs
         assert call_kwargs["timeout"] == 30
+
+    @patch("scraper.fetcher.requests.get")
+    @patch("run_guard.get_fetch_metadata")
+    @patch("run_guard.set_fetch_metadata")
+    def test_returns_none_on_304_not_modified(self, mock_set, mock_get_meta, mock_get):
+        mock_get_meta.return_value = {"etag": "abc"}
+        mock_get.return_value.status_code = 304
+
+        result = fetch_with_conditional("https://example.com/feed")
+        assert result is None
+        mock_set.assert_not_called()
 
 
 class TestGetCrawlDelay:

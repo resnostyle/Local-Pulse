@@ -167,11 +167,12 @@ class TestExtractTimesFromVisitRaleighPage:
 
 
 class TestFetchAndParse:
-    @patch("scraper.rss_handler.requests.get")
+    @patch("scraper.fetcher.requests.get")
     def test_parses_rss_feed(self, mock_get):
         mock_get.return_value.status_code = 200
+        mock_get.return_value.text = SAMPLE_RSS
+        mock_get.return_value.headers = {}
         mock_get.return_value.raise_for_status = lambda: None
-        mock_get.return_value.content = SAMPLE_RSS.encode()
 
         events = fetch_and_parse("https://example.com/feed", "Test Source")
 
@@ -184,7 +185,7 @@ class TestFetchAndParse:
         # Minimal Event has no pub_date/description dates - should be skipped (no datetime.utcnow fallback)
         assert "Minimal Event" not in titles
 
-    @patch("scraper.rss_handler.requests.get")
+    @patch("scraper.fetcher.requests.get")
     def test_returns_empty_on_fetch_failure(self, mock_get):
         import requests
         mock_get.side_effect = requests.RequestException("Connection failed")

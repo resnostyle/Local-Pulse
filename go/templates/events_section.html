@@ -29,6 +29,7 @@
                 {{if .Venue}}<span>{{.Venue}}</span>{{end}}
                 {{if .City}}<span>{{.City}}</span>{{end}}
                 {{if .Category}}<span class="category-pill">{{.Category}}</span>{{end}}
+                {{if .Recurring}}<span class="category-pill recurring">Recurring</span>{{end}}
                 {{if .SourceURL}}<a href="{{.SourceURL}}" target="_blank" rel="noopener">Learn more</a>{{end}}
             </div>
             {{if .Description}}<p class="description">{{.Description}}</p>{{end}}

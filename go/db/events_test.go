@@ -41,8 +41,9 @@ func TestListCategories(t *testing.T) {
 	defer db.Close()
 
 	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	prev := NowFunc
 	NowFunc = func() time.Time { return fixedNow }
-	defer func() { NowFunc = func() time.Time { return time.Now().UTC() } }()
+	defer func() { NowFunc = prev }()
 	cutoff := fixedNow.Truncate(24 * time.Hour) // startOfToday in tests
 
 	rows := sqlmock.NewRows([]string{"category"}).
@@ -79,8 +80,9 @@ func TestListCategories_Empty(t *testing.T) {
 	defer db.Close()
 
 	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	prev := NowFunc
 	NowFunc = func() time.Time { return fixedNow }
-	defer func() { NowFunc = func() time.Time { return time.Now().UTC() } }()
+	defer func() { NowFunc = prev }()
 
 	cutoff := fixedNow.Truncate(24 * time.Hour)
 	rows := sqlmock.NewRows([]string{"category"})
@@ -108,8 +110,9 @@ func TestListEventsPaginated(t *testing.T) {
 	defer db.Close()
 
 	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	prev := NowFunc
 	NowFunc = func() time.Time { return fixedNow }
-	defer func() { NowFunc = func() time.Time { return time.Now().UTC() } }()
+	defer func() { NowFunc = prev }()
 
 	cutoff := fixedNow.Truncate(24 * time.Hour)
 	// Count query
@@ -119,8 +122,8 @@ func TestListEventsPaginated(t *testing.T) {
 		WillReturnRows(countRows)
 
 	// List query
-	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "fingerprint", "created_at", "updated_at"}).
-		AddRow(1, "Test Event", "Desc", fixedNow, fixedNow.Add(time.Hour), "Venue A", "Raleigh", "Music", "Source", "https://example.com", "fp1", fixedNow, fixedNow)
+	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "recurring", "fingerprint", "created_at", "updated_at"}).
+		AddRow(1, "Test Event", "Desc", fixedNow, fixedNow.Add(time.Hour), "Venue A", "Raleigh", "Music", "Source", "https://example.com", false, "fp1", fixedNow, fixedNow)
 	mock.ExpectQuery("SELECT id, title, description, start_time").
 		WithArgs(cutoff, cutoff, 20, 0).
 		WillReturnRows(eventRows)
@@ -151,8 +154,9 @@ func TestListEventsPaginated_InvalidPageUsesDefault(t *testing.T) {
 	defer db.Close()
 
 	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	prev := NowFunc
 	NowFunc = func() time.Time { return fixedNow }
-	defer func() { NowFunc = func() time.Time { return time.Now().UTC() } }()
+	defer func() { NowFunc = prev }()
 
 	cutoff := fixedNow.Truncate(24 * time.Hour)
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(0)
@@ -160,7 +164,7 @@ func TestListEventsPaginated_InvalidPageUsesDefault(t *testing.T) {
 		WithArgs(cutoff, cutoff).
 		WillReturnRows(countRows)
 
-	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "fingerprint", "created_at", "updated_at"})
+	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "recurring", "fingerprint", "created_at", "updated_at"})
 	mock.ExpectQuery("SELECT id, title, description, start_time").
 		WithArgs(cutoff, cutoff, DefaultPageSize, 0).
 		WillReturnRows(eventRows)
@@ -182,8 +186,9 @@ func TestListCategories_QueryError(t *testing.T) {
 	defer db.Close()
 
 	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	prev := NowFunc
 	NowFunc = func() time.Time { return fixedNow }
-	defer func() { NowFunc = func() time.Time { return time.Now().UTC() } }()
+	defer func() { NowFunc = prev }()
 
 	cutoff := fixedNow.Truncate(24 * time.Hour)
 	mock.ExpectQuery("SELECT DISTINCT category FROM events").
@@ -207,8 +212,9 @@ func TestListEventsByCategoryPaginated(t *testing.T) {
 	defer db.Close()
 
 	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	prev := NowFunc
 	NowFunc = func() time.Time { return fixedNow }
-	defer func() { NowFunc = func() time.Time { return time.Now().UTC() } }()
+	defer func() { NowFunc = prev }()
 
 	cutoff := fixedNow.Truncate(24 * time.Hour)
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(10)
@@ -216,8 +222,8 @@ func TestListEventsByCategoryPaginated(t *testing.T) {
 		WithArgs("Music", cutoff, cutoff).
 		WillReturnRows(countRows)
 
-	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "fingerprint", "created_at", "updated_at"}).
-		AddRow(1, "Concert", nil, fixedNow, nil, "Arena", "Cary", "Music", "Visit Raleigh", "https://example.com", "fp1", fixedNow, fixedNow)
+	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "recurring", "fingerprint", "created_at", "updated_at"}).
+		AddRow(1, "Concert", nil, fixedNow, nil, "Arena", "Cary", "Music", "Visit Raleigh", "https://example.com", false, "fp1", fixedNow, fixedNow)
 	mock.ExpectQuery("SELECT id, title, description, start_time").
 		WithArgs("Music", cutoff, cutoff, 20, 0).
 		WillReturnRows(eventRows)
@@ -248,8 +254,9 @@ func TestListEventsTodayPaginated(t *testing.T) {
 	defer db.Close()
 
 	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	prev := NowFunc
 	NowFunc = func() time.Time { return fixedNow }
-	defer func() { NowFunc = func() time.Time { return time.Now().UTC() } }()
+	defer func() { NowFunc = prev }()
 
 	start := fixedNow.Truncate(24 * time.Hour)
 	end := start.Add(24 * time.Hour)
@@ -259,8 +266,8 @@ func TestListEventsTodayPaginated(t *testing.T) {
 		WithArgs(start, end, start).
 		WillReturnRows(countRows)
 
-	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "fingerprint", "created_at", "updated_at"}).
-		AddRow(1, "Today Event", nil, fixedNow, nil, "Venue", "Raleigh", "Music", "Source", "https://example.com", "fp1", fixedNow, fixedNow)
+	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "recurring", "fingerprint", "created_at", "updated_at"}).
+		AddRow(1, "Today Event", nil, fixedNow, nil, "Venue", "Raleigh", "Music", "Source", "https://example.com", false, "fp1", fixedNow, fixedNow)
 	mock.ExpectQuery("SELECT id, title, description, start_time").
 		WithArgs(start, end, start, 20, 0).
 		WillReturnRows(eventRows)
@@ -291,8 +298,9 @@ func TestListEventsWeekendPaginated(t *testing.T) {
 	defer db.Close()
 
 	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC) // Monday
+	prev := NowFunc
 	NowFunc = func() time.Time { return fixedNow }
-	defer func() { NowFunc = func() time.Time { return time.Now().UTC() } }()
+	defer func() { NowFunc = prev }()
 
 	saturday := time.Date(2026, 3, 21, 0, 0, 0, 0, time.UTC)
 	sunday := saturday.Add(48 * time.Hour)
@@ -302,8 +310,8 @@ func TestListEventsWeekendPaginated(t *testing.T) {
 		WithArgs(saturday, sunday, saturday).
 		WillReturnRows(countRows)
 
-	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "fingerprint", "created_at", "updated_at"}).
-		AddRow(1, "Weekend Event", nil, saturday.Add(2*time.Hour), nil, "Park", "Cary", "Sports", "Source", "https://example.com", "fp1", fixedNow, fixedNow)
+	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "recurring", "fingerprint", "created_at", "updated_at"}).
+		AddRow(1, "Weekend Event", nil, saturday.Add(2*time.Hour), nil, "Park", "Cary", "Sports", "Source", "https://example.com", false, "fp1", fixedNow, fixedNow)
 	mock.ExpectQuery("SELECT id, title, description, start_time").
 		WithArgs(saturday, sunday, saturday, 20, 0).
 		WillReturnRows(eventRows)
@@ -338,8 +346,8 @@ func TestListAllEventsPaginated(t *testing.T) {
 		WillReturnRows(countRows)
 
 	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
-	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "fingerprint", "created_at", "updated_at"}).
-		AddRow(1, "Admin Event", "Past event", fixedNow.Add(-24*time.Hour), nil, "Old Venue", "Raleigh", "Arts", "Source", "https://example.com", "fp1", fixedNow, fixedNow)
+	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "recurring", "fingerprint", "created_at", "updated_at"}).
+		AddRow(1, "Admin Event", "Past event", fixedNow.Add(-24*time.Hour), nil, "Old Venue", "Raleigh", "Arts", "Source", "https://example.com", false, "fp1", fixedNow, fixedNow)
 	mock.ExpectQuery("SELECT id, title, description, start_time").
 		WithArgs(50, 0).
 		WillReturnRows(eventRows)

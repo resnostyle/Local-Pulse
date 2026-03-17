@@ -20,10 +20,57 @@ DEFAULT_CRAWL_DELAY = 0.3  # seconds when robots.txt has no Crawl-delay
 CRAWL_DELAY_RE = re.compile(r"Crawl-delay:\s*(\d+(?:\.\d+)?)", re.IGNORECASE)
 
 
+def fetch_with_conditional(
+    url: str,
+    timeout: int = DEFAULT_TIMEOUT,
+    user_agent: str = USER_AGENT,
+) -> Optional[str]:
+    """Fetch URL with HTTP conditional request (ETag/Last-Modified).
+
+    If the server returns 304 Not Modified, returns None and skips parsing.
+    On 200, stores ETag/Last-Modified for the next run and returns the content.
+
+    Args:
+        url: URL to fetch
+        timeout: Request timeout in seconds
+        user_agent: User-Agent header
+
+    Returns:
+        Response body as str, or None if 304 or on error
+    """
+    # Avoid circular import - run_guard is at package level
+    from run_guard import get_fetch_metadata, set_fetch_metadata
+
+    headers = {"User-Agent": user_agent}
+    stored = get_fetch_metadata(url)
+    if stored:
+        if stored.get("etag"):
+            headers["If-None-Match"] = stored["etag"]
+        if stored.get("last_modified"):
+            headers["If-Modified-Since"] = stored["last_modified"]
+
+    try:
+        resp = requests.get(url, timeout=timeout, headers=headers)
+        if resp.status_code == 304:
+            logger.info("Skipping %s: not modified (304)", url)
+            return None
+        resp.raise_for_status()
+        # Store for next run
+        etag = resp.headers.get("ETag")
+        last_modified = resp.headers.get("Last-Modified")
+        if etag or last_modified:
+            set_fetch_metadata(url, etag, last_modified)
+        return resp.text
+    except requests.RequestException as e:
+        logger.warning("Failed to fetch %s: %s", url, e)
+        return None
+
+
 def fetch_html(url: str, timeout: int = DEFAULT_TIMEOUT) -> Optional[str]:
     """Fetch raw HTML from a URL.
 
-    Uses requests with a standard User-Agent. For JS-rendered pages,
+    Uses conditional fetch (ETag/Last-Modified) when available to skip
+    processing when the page has not changed. For JS-rendered pages,
     consider using Playwright instead.
 
     Args:
@@ -31,19 +78,9 @@ def fetch_html(url: str, timeout: int = DEFAULT_TIMEOUT) -> Optional[str]:
         timeout: Request timeout in seconds
 
     Returns:
-        HTML string or None on failure
+        HTML string or None on failure or 304
     """
-    try:
-        resp = requests.get(
-            url,
-            timeout=timeout,
-            headers={"User-Agent": USER_AGENT},
-        )
-        resp.raise_for_status()
-        return resp.text
-    except requests.RequestException as e:
-        logger.warning("Failed to fetch %s: %s", url, e)
-        return None
+    return fetch_with_conditional(url, timeout=timeout, user_agent=USER_AGENT)
 
 
 def extract_text(html: str) -> str:

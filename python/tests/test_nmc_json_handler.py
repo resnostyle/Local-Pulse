@@ -1,5 +1,6 @@
 """Tests for NMC JSON handler."""
 
+import json
 from datetime import datetime
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
@@ -74,17 +75,18 @@ class TestEventToDict:
 
 
 class TestFetchNmcJsonEvents:
-    @patch("scraper.nmc_json_handler.requests.get")
+    @patch("scraper.fetcher.requests.get")
     def test_parses_json_feed(self, mock_get):
         mock_get.return_value.status_code = 200
-        mock_get.return_value.json.return_value = [
+        mock_get.return_value.text = json.dumps([
             {
                 "title": "Test Event",
                 "start": "2026-03-20T19:00:00-04:00",
                 "end": "2026-03-20T21:00:00-04:00",
                 "url": "https://example.com/event/1",
             },
-        ]
+        ])
+        mock_get.return_value.headers = {}
         mock_get.return_value.raise_for_status = lambda: None
 
         events = fetch_nmc_json_events(
@@ -98,7 +100,7 @@ class TestFetchNmcJsonEvents:
         assert events[0]["title"] == "Test Event"
         assert events[0]["source"] == "Downtown Cary Park"
 
-    @patch("scraper.nmc_json_handler.requests.get")
+    @patch("scraper.fetcher.requests.get")
     def test_returns_empty_on_fetch_failure(self, mock_get):
         import requests
 
@@ -110,25 +112,27 @@ class TestFetchNmcJsonEvents:
         )
         assert events == []
 
-    @patch("scraper.nmc_json_handler.requests.get")
+    @patch("scraper.fetcher.requests.get")
     def test_returns_empty_on_non_list_response(self, mock_get):
         mock_get.return_value.status_code = 200
-        mock_get.return_value.json.return_value = {"events": []}
+        mock_get.return_value.text = json.dumps({"events": []})
+        mock_get.return_value.headers = {}
         mock_get.return_value.raise_for_status = lambda: None
 
         events = fetch_nmc_json_events("https://example.com/events", "Test")
         assert events == []
 
-    @patch("scraper.nmc_json_handler.requests.get")
+    @patch("scraper.fetcher.requests.get")
     def test_handles_invalid_timezone(self, mock_get):
         mock_get.return_value.status_code = 200
-        mock_get.return_value.json.return_value = [
+        mock_get.return_value.text = json.dumps([
             {
                 "title": "Event",
                 "start": "2026-03-20T19:00:00",
                 "url": "https://x.com",
             },
-        ]
+        ])
+        mock_get.return_value.headers = {}
         mock_get.return_value.raise_for_status = lambda: None
 
         events = fetch_nmc_json_events(

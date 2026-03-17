@@ -154,6 +154,11 @@ nav a.active {
   font-weight: 500;
 }
 
+.event-meta .category-pill.recurring {
+  background: rgba(100, 116, 139, 0.15);
+  color: var(--color-text-muted);
+}
+
 .event-meta a {
   color: var(--color-accent);
   text-decoration: none;

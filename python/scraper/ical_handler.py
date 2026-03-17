@@ -7,7 +7,6 @@ from datetime import date, datetime, timezone
 from typing import Optional
 from urllib.parse import urlparse
 
-import requests
 from icalendar import Calendar
 
 logger = logging.getLogger(__name__)
@@ -75,6 +74,8 @@ def _event_to_dict(component, source_name: str, base_url: str, venue: Optional[s
             if eid.isdigit() and ("civicengage" in base_url.lower() or "apexnc.org" in base_url or "carync.gov" in base_url):
                 source_url = f"{base_url.rstrip('/')}/calendar.aspx?EID={eid}"
 
+    recurring = component.get("rrule") is not None or component.get("recurrence-id") is not None
+
     return {
         "title": title,
         "description": desc_str,
@@ -85,6 +86,7 @@ def _event_to_dict(component, source_name: str, base_url: str, venue: Optional[s
         "category": None,
         "source": source_name,
         "source_url": source_url or base_url,
+        "recurring": recurring,
     }
 
 
@@ -107,16 +109,10 @@ def fetch_ical_events(
     Returns:
         List of event dicts ready for insert.
     """
-    try:
-        resp = requests.get(
-            url,
-            timeout=DEFAULT_TIMEOUT,
-            headers={"User-Agent": USER_AGENT},
-        )
-        resp.raise_for_status()
-        ics_text = resp.text
-    except requests.RequestException as e:
-        logger.warning("iCal fetch failed %s: %s", url, e)
+    from .fetcher import fetch_with_conditional
+
+    ics_text = fetch_with_conditional(url, timeout=DEFAULT_TIMEOUT, user_agent=USER_AGENT)
+    if ics_text is None:
         return []
 
     if not base_url:
