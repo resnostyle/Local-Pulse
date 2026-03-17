@@ -31,7 +31,7 @@ def _to_naive_utc(dt) -> Optional[datetime]:
 
 
 def _extract_url_from_description(desc: str, base_url: str) -> Optional[str]:
-    """Extract event URL from DESCRIPTION (e.g. 'https://www.apexnc.org/calendar.aspx?EID=4496')."""
+    """Extract event URL from DESCRIPTION."""
     if not desc:
         return None
     # Common pattern: URL at start of description
@@ -70,8 +70,8 @@ def _event_to_dict(component, source_name: str, base_url: str, venue: Optional[s
         uid = component.get("uid")
         if uid:
             eid = str(uid).strip()
-            # Only build CivicEngage-style URL for known CivicEngage domains
-            if eid.isdigit() and ("civicengage" in base_url.lower() or "apexnc.org" in base_url or "carync.gov" in base_url):
+            # CivicEngage-style URL pattern used by many municipal sites
+            if eid.isdigit() and base_url:
                 source_url = f"{base_url.rstrip('/')}/calendar.aspx?EID={eid}"
 
     recurring = component.get("rrule") is not None or component.get("recurrence-id") is not None
@@ -104,7 +104,7 @@ def fetch_ical_events(
         source_name: Source label for events
         venue: Default venue (overridden by LOCATION if present)
         city: Default city
-        base_url: Base URL for building event links (e.g. https://www.apexnc.org)
+        base_url: Base URL for building event links (e.g. https://example.com)
 
     Returns:
         List of event dicts ready for insert.

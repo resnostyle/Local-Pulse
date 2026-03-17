@@ -7,7 +7,7 @@ import pytest
 
 from scraper.rss_handler import (
     _extract_dates_from_description,
-    _extract_times_from_visitraleigh_page,
+    _extract_times_from_event_page,
     _parse_date,
     _parse_times_str,
     _strip_html,
@@ -124,7 +124,7 @@ class TestOvernightEventEndTime:
 
     @patch("scraper.rss_handler.requests.get")
     def test_overnight_event_end_after_start(self, mock_get):
-        from scraper.rss_handler import _enrich_visitraleigh_event
+        from scraper.rss_handler import _enrich_event_with_times
 
         mock_get.return_value.status_code = 200
         mock_get.return_value.raise_for_status = lambda: None
@@ -135,15 +135,15 @@ class TestOvernightEventEndTime:
             "title": "Late Night",
             "start_time": datetime(2026, 3, 16, 0, 0, 0),
             "end_time": datetime(2026, 3, 16, 0, 0, 0),
-            "source_url": "https://www.visitraleigh.com/event/late-night/123/",
+            "source_url": "https://example.com/event/late-night/123/",
         }
-        _enrich_visitraleigh_event(event, crawl_delay=0)
+        _enrich_event_with_times(event, crawl_delay=0)
         assert event["start_time"] < event["end_time"]
         # 11pm Mar 16 ET -> 11pm UTC (EST) or 3am Mar 17 UTC (EDT); 1am Mar 17 ET -> next day
         assert event["end_time"].day >= event["start_time"].day
 
 
-class TestExtractTimesFromVisitRaleighPage:
+class TestExtractTimesFromEventPage:
     def test_extracts_from_li_times(self):
         html = '''
         <li class="info-list-item times">
@@ -151,7 +151,7 @@ class TestExtractTimesFromVisitRaleighPage:
             <span class="info-list-value">Mon., 7pm</span>
         </li>
         '''
-        assert _extract_times_from_visitraleigh_page(html) == ((19, 0), None)
+        assert _extract_times_from_event_page(html) == ((19, 0), None)
 
     def test_extracts_range(self):
         html = '''
@@ -159,11 +159,11 @@ class TestExtractTimesFromVisitRaleighPage:
             <span class="info-list-value">7-8pm</span>
         </li>
         '''
-        assert _extract_times_from_visitraleigh_page(html) == ((19, 0), (20, 0))
+        assert _extract_times_from_event_page(html) == ((19, 0), (20, 0))
 
     def test_returns_none_when_no_times(self):
         html = "<html><body><p>No times here</p></body></html>"
-        assert _extract_times_from_visitraleigh_page(html) is None
+        assert _extract_times_from_event_page(html) is None
 
 
 class TestFetchAndParse:

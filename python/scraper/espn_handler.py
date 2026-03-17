@@ -1,4 +1,4 @@
-"""Fetch ESPN scoreboard data and filter by configured state (e.g. North Carolina)."""
+"""Fetch sports event data from scoreboard APIs (e.g. ESPN) and filter by configured region."""
 
 import logging
 from datetime import datetime
@@ -9,12 +9,12 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 30
-ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports"
+DEFAULT_API_BASE = "https://site.api.espn.com/apis/site/v2/sports"
 USER_AGENT = "Mozilla/5.0 (compatible; LocalPulse/1.0; +https://github.com/localpulse)"
 
 
 def _load_espn_config() -> dict:
-    """Load ESPN config from espn.yaml."""
+    """Load sports/ESPN config from espn.yaml."""
     config_path = Path(__file__).resolve().parent.parent / "config" / "espn.yaml"
     if not config_path.exists():
         return {}
@@ -52,8 +52,8 @@ def _is_nc_event(event: dict, config: dict) -> bool:
     return False
 
 
-def _event_to_dict(event: dict, source_name: str) -> dict | None:
-    """Convert ESPN event to our event format."""
+def _event_to_dict(event: dict, source_name: str, config: dict) -> dict | None:
+    """Convert sports API event to our event format."""
     try:
         date_str = event.get("date") or event.get("startDate", "")
         if not date_str:
@@ -83,7 +83,8 @@ def _event_to_dict(event: dict, source_name: str) -> dict | None:
                 break
         if not source_url:
             eid = event.get("id", "")
-            source_url = f"https://www.espn.com/game/_/gameId/{eid}" if eid else ""
+            template = config.get("game_url_template", "https://www.espn.com/game/_/gameId/{id}")
+            source_url = template.format(id=eid) if eid and "{id}" in template else (f"https://www.espn.com/game/_/gameId/{eid}" if eid else "")
 
         status = event.get("status", {})
         status_type = status.get("type", {})
@@ -91,7 +92,7 @@ def _event_to_dict(event: dict, source_name: str) -> dict | None:
 
         return {
             "title": name,
-            "description": status_desc or f"ESPN: {name}",
+            "description": status_desc or name,
             "start_time": start_time,
             "end_time": None,
             "venue": venue_name,
@@ -127,7 +128,8 @@ def fetch_espn_events(source_name: str = "ESPN") -> list[dict]:
         league = league_cfg.get("league", "")
         if not sport or not league:
             continue
-        url = f"{ESPN_BASE}/{sport}/{league}/scoreboard"
+        api_base = config.get("api_base_url", DEFAULT_API_BASE)
+        url = f"{api_base.rstrip('/')}/{sport}/{league}/scoreboard"
         try:
             resp = requests.get(
                 url,
@@ -147,7 +149,7 @@ def fetch_espn_events(source_name: str = "ESPN") -> list[dict]:
         for evt in events:
             if not _is_nc_event(evt, config):
                 continue
-            out = _event_to_dict(evt, source_name)
+            out = _event_to_dict(evt, source_name, config)
             if out is None:
                 continue
             eid = evt.get("id", "")

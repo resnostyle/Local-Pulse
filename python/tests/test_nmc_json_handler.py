@@ -57,11 +57,13 @@ class TestEventToDict:
         item = {"title": "Event", "start": "invalid", "url": "https://x.com"}
         assert _event_to_dict(item, "Source", None, None) is None
 
-    def test_uses_default_source_url_when_missing(self):
+    def test_uses_site_base_url_when_item_url_missing(self):
         item = {"title": "Event", "start": "2026-03-20T19:00:00Z", "url": ""}
-        result = _event_to_dict(item, "Downtown Cary Park", None, None)
+        result = _event_to_dict(
+            item, "Test Source", None, None, site_base_url="https://example.com"
+        )
         assert result is not None
-        assert "downtowncarypark.com" in result["source_url"]
+        assert result["source_url"] == "https://example.com/events"
 
     def test_unescapes_html_in_title(self):
         item = {

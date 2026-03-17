@@ -1,4 +1,4 @@
-"""Fetch events from NMC-style JSON API (e.g. Downtown Cary Park)."""
+"""Fetch events from NMC-style JSON API (WordPress/nmc-feeds compatible)."""
 
 import html
 import json
@@ -49,11 +49,8 @@ def _event_to_dict(
         return None
     end_dt = _parse_dt(item.get("end", ""), tz=tz)
     source_url = item.get("url", "").strip()
-    if not source_url:
-        if site_base_url:
-            source_url = f"{site_base_url.rstrip('/')}/things-to-do/calendar/"
-        else:
-            source_url = "https://downtowncarypark.com/things-to-do/calendar/"
+    if not source_url and site_base_url:
+        source_url = f"{site_base_url.rstrip('/')}/events"  # Generic fallback for NMC-style sites
 
     recurring = bool(item.get("recurring") or item.get("recurrence") or item.get("rrule"))
     return {
@@ -81,7 +78,7 @@ def fetch_nmc_json_events(
     """Fetch events from NMC-style JSON API.
 
     Args:
-        base_url: API base URL (e.g. https://downtowncarypark.com/wp-json/nmc-feeds/v1/events)
+        base_url: API base URL (e.g. https://example.com/wp-json/nmc-feeds/v1/events)
         source_name: Source label for events
         venue: Venue name (optional)
         city: City name (optional)

@@ -16,7 +16,7 @@ USER_AGENT = (
 )
 DEFAULT_CRAWL_DELAY = 0.3  # seconds when robots.txt has no Crawl-delay
 
-# Crawl-delay is non-standard but widely used (e.g. Visit Raleigh)
+# Crawl-delay is non-standard but used by some sites
 CRAWL_DELAY_RE = re.compile(r"Crawl-delay:\s*(\d+(?:\.\d+)?)", re.IGNORECASE)
 
 
