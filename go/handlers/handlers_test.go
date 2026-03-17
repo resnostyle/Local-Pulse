@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+
+	"local-pulse/go/db"
 )
 
 func TestHealth_Returns200WhenDBHealthy(t *testing.T) {
@@ -145,16 +147,24 @@ func TestIndex_Returns200(t *testing.T) {
 	h, mock := newTestHandler(t)
 	defer h.DB.Close()
 
+	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	db.NowFunc = func() time.Time { return fixedNow }
+	defer func() { db.NowFunc = func() time.Time { return time.Now().UTC() } }()
+	cutoff := fixedNow.Truncate(24 * time.Hour)
+
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(5)
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM events").
+		WithArgs(cutoff, cutoff).
 		WillReturnRows(countRows)
 
 	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "fingerprint", "created_at", "updated_at"})
 	mock.ExpectQuery("SELECT id, title, description, start_time").
+		WithArgs(cutoff, cutoff, 12, 0).
 		WillReturnRows(eventRows)
 
 	rows := sqlmock.NewRows([]string{"category"})
 	mock.ExpectQuery("SELECT DISTINCT category FROM events").
+		WithArgs(cutoff, cutoff).
 		WillReturnRows(rows)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -191,16 +201,24 @@ func TestEventsHTML_Returns200(t *testing.T) {
 	h, mock := newTestHandler(t)
 	defer h.DB.Close()
 
+	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	db.NowFunc = func() time.Time { return fixedNow }
+	defer func() { db.NowFunc = func() time.Time { return time.Now().UTC() } }()
+	cutoff := fixedNow.Truncate(24 * time.Hour)
+
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(0)
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM events").
+		WithArgs(cutoff, cutoff).
 		WillReturnRows(countRows)
 
 	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "fingerprint", "created_at", "updated_at"})
 	mock.ExpectQuery("SELECT id, title, description, start_time").
+		WithArgs(cutoff, cutoff, db.DefaultPageSize, 0).
 		WillReturnRows(eventRows)
 
 	rows := sqlmock.NewRows([]string{"category"})
 	mock.ExpectQuery("SELECT DISTINCT category FROM events").
+		WithArgs(cutoff, cutoff).
 		WillReturnRows(rows)
 
 	req := httptest.NewRequest(http.MethodGet, "/events", nil)
@@ -220,16 +238,24 @@ func TestEventsHTML_HTMXReturnsFragment(t *testing.T) {
 	h, mock := newTestHandler(t)
 	defer h.DB.Close()
 
+	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	db.NowFunc = func() time.Time { return fixedNow }
+	defer func() { db.NowFunc = func() time.Time { return time.Now().UTC() } }()
+	cutoff := fixedNow.Truncate(24 * time.Hour)
+
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(0)
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM events").
+		WithArgs(cutoff, cutoff).
 		WillReturnRows(countRows)
 
 	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "fingerprint", "created_at", "updated_at"})
 	mock.ExpectQuery("SELECT id, title, description, start_time").
+		WithArgs(cutoff, cutoff, db.DefaultPageSize, 0).
 		WillReturnRows(eventRows)
 
 	rows := sqlmock.NewRows([]string{"category"})
 	mock.ExpectQuery("SELECT DISTINCT category FROM events").
+		WithArgs(cutoff, cutoff).
 		WillReturnRows(rows)
 
 	req := httptest.NewRequest(http.MethodGet, "/events", nil)
@@ -264,18 +290,24 @@ func TestEventsByCategoryHTML_ValidCategory(t *testing.T) {
 	h, mock := newTestHandler(t)
 	defer h.DB.Close()
 
+	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	db.NowFunc = func() time.Time { return fixedNow }
+	defer func() { db.NowFunc = func() time.Time { return time.Now().UTC() } }()
+	cutoff := fixedNow.Truncate(24 * time.Hour)
+
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(3)
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM events WHERE category = \\?").
-		WithArgs("Music").
+		WithArgs("Music", cutoff, cutoff).
 		WillReturnRows(countRows)
 
 	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "fingerprint", "created_at", "updated_at"})
 	mock.ExpectQuery("SELECT id, title, description, start_time").
-		WithArgs("Music", 20, 0).
+		WithArgs("Music", cutoff, cutoff, 20, 0).
 		WillReturnRows(eventRows)
 
 	rows := sqlmock.NewRows([]string{"category"})
 	mock.ExpectQuery("SELECT DISTINCT category FROM events").
+		WithArgs(cutoff, cutoff).
 		WillReturnRows(rows)
 
 	req := httptest.NewRequest(http.MethodGet, "/events/category/Music", nil)
@@ -295,17 +327,24 @@ func TestEventsHTML_HTMXWithPageParam(t *testing.T) {
 	h, mock := newTestHandler(t)
 	defer h.DB.Close()
 
+	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	db.NowFunc = func() time.Time { return fixedNow }
+	defer func() { db.NowFunc = func() time.Time { return time.Now().UTC() } }()
+	cutoff := fixedNow.Truncate(24 * time.Hour)
+
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(50)
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM events").
+		WithArgs(cutoff, cutoff).
 		WillReturnRows(countRows)
 
 	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "fingerprint", "created_at", "updated_at"})
 	mock.ExpectQuery("SELECT id, title, description, start_time").
-		WithArgs(20, 20).
+		WithArgs(cutoff, cutoff, 20, 20).
 		WillReturnRows(eventRows)
 
 	rows := sqlmock.NewRows([]string{"category"})
 	mock.ExpectQuery("SELECT DISTINCT category FROM events").
+		WithArgs(cutoff, cutoff).
 		WillReturnRows(rows)
 
 	req := httptest.NewRequest(http.MethodGet, "/events?page=2", nil)

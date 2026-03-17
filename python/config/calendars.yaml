@@ -1,10 +1,16 @@
 calendars:
-  - url: https://downtowncarypark.com/calendar
+  - source: "ESPN"
+    type: espn
+  - url: https://downtowncarypark.com/wp-json/nmc-feeds/v1/events
     source: "Downtown Cary Park"
-    type: html
+    type: nmc_json
   - url: https://www.visitraleigh.com/event/rss/
     source: "Visit Raleigh"
     type: rss
+  - url: https://www.apexnc.org/common/modules/iCalendar/iCalendar.aspx?catID=14&feed=calendar
+    source: "Town of Apex"
+    type: ical
+    city: "Apex"
   - url: https://www.carync.gov/connect-engage/calendar
     source: "Town of Cary"
     type: html

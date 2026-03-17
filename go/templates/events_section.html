@@ -22,7 +22,7 @@
     <div class="events-list">
         {{if .Events}}
         {{range .Events}}
-        <article class="event-card">
+        <article class="event-card{{if eq (derefStr .Category) "Sports"}} sports{{end}}">
             <h2>{{.Title}}</h2>
             <div class="event-meta">
                 <span>{{formatDateTime .StartTime}}</span>

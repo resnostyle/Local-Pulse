@@ -27,6 +27,14 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 # Scheduler: default Sunday 2:00 AM UTC
 SCHEDULE_CRON = os.getenv("SCHEDULE_CRON", "0 2 * * 0")
 
+# Run guard: min minutes between runs per endpoint (avoid abusing servers)
+_raw_interval = os.getenv("RUN_MIN_INTERVAL_MINUTES", "60")
+try:
+    RUN_MIN_INTERVAL_MINUTES = max(1, int(_raw_interval))
+except (ValueError, TypeError):
+    RUN_MIN_INTERVAL_MINUTES = 60
+RUN_MIN_INTERVAL_SECONDS = RUN_MIN_INTERVAL_MINUTES * 60
+
 
 def load_calendar_sources() -> list[dict]:
     """Load calendar sources from calendars.yaml."""

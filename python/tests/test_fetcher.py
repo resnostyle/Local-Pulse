@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from scraper.fetcher import extract_text, fetch_html
+from scraper.fetcher import DEFAULT_CRAWL_DELAY, extract_text, fetch_html, get_crawl_delay
 
 
 class TestExtractText:
@@ -60,3 +60,33 @@ class TestFetchHtml:
         assert "LocalPulse" in call_kwargs["headers"]["User-Agent"]
         assert "timeout" in call_kwargs
         assert call_kwargs["timeout"] == 30
+
+
+class TestGetCrawlDelay:
+    @patch("scraper.fetcher.requests.get")
+    def test_returns_crawl_delay_from_robots_txt(self, mock_get):
+        mock_get.return_value.text = "User-agent: *\nCrawl-delay: 2\n"
+        mock_get.return_value.raise_for_status = lambda: None
+
+        assert get_crawl_delay("https://www.visitraleigh.com/event/foo/") == 2.0
+
+    @patch("scraper.fetcher.requests.get")
+    def test_returns_default_when_no_crawl_delay(self, mock_get):
+        mock_get.return_value.text = "User-agent: *\nDisallow: /admin/\n"
+        mock_get.return_value.raise_for_status = lambda: None
+
+        assert get_crawl_delay("https://example.com/page") == DEFAULT_CRAWL_DELAY
+
+    @patch("scraper.fetcher.requests.get")
+    def test_returns_default_on_fetch_failure(self, mock_get):
+        import requests
+        mock_get.side_effect = requests.RequestException("Connection failed")
+
+        assert get_crawl_delay("https://example.com/") == DEFAULT_CRAWL_DELAY
+
+    @patch("scraper.fetcher.requests.get")
+    def test_clamps_delay_to_reasonable_range(self, mock_get):
+        mock_get.return_value.text = "Crawl-delay: 300\n"
+        mock_get.return_value.raise_for_status = lambda: None
+
+        assert get_crawl_delay("https://example.com/") == 60.0

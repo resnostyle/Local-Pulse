@@ -1,0 +1,19 @@
+# ESPN sports highlight config - games for teams in the configured state
+espn:
+  state: North Carolina
+  state_code: NC  # for venue.address.state filtering
+  # Team locations (team.team.location) that indicate in-state teams
+  team_locations:
+    - Charlotte   # Hornets
+    - Carolina    # Panthers
+    - NC State
+    - Duke
+    - North Carolina
+    - Wake Forest
+  leagues:
+    - sport: basketball
+      league: nba
+    - sport: basketball
+      league: mens-college-basketball
+    - sport: football
+      league: nfl

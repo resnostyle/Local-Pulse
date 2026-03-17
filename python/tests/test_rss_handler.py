@@ -7,7 +7,9 @@ import pytest
 
 from scraper.rss_handler import (
     _extract_dates_from_description,
+    _extract_times_from_visitraleigh_page,
     _parse_date,
+    _parse_times_str,
     _strip_html,
     fetch_and_parse,
 )
@@ -98,6 +100,70 @@ class TestExtractDatesFromDescription:
         )
         assert start == datetime(2026, 1, 5, 0, 0, 0, 0)
         assert end == datetime(2026, 3, 31, 0, 0, 0, 0)
+
+
+class TestParseTimesStr:
+    def test_single_time(self):
+        assert _parse_times_str("7pm") == ((19, 0), None)
+        assert _parse_times_str("Mon., 7pm") == ((19, 0), None)
+        assert _parse_times_str("5:30pm") == ((17, 30), None)
+        assert _parse_times_str("11am") == ((11, 0), None)
+
+    def test_range_format(self):
+        assert _parse_times_str("7-8pm") == ((19, 0), (20, 0))
+        assert _parse_times_str("Mon., 7-8pm") == ((19, 0), (20, 0))
+
+    def test_skips_placeholder(self):
+        assert _parse_times_str("All day") is None
+        assert _parse_times_str("TBD") is None
+        assert _parse_times_str("TBA") is None
+
+
+class TestOvernightEventEndTime:
+    """Ensure overnight events (e.g. 11pm-1am) get end_time > start_time."""
+
+    @patch("scraper.rss_handler.requests.get")
+    def test_overnight_event_end_after_start(self, mock_get):
+        from scraper.rss_handler import _enrich_visitraleigh_event
+
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.raise_for_status = lambda: None
+        mock_get.return_value.text = '''
+        <li class="times"><span class="info-list-value">11pm-1am</span></li>
+        '''
+        event = {
+            "title": "Late Night",
+            "start_time": datetime(2026, 3, 16, 0, 0, 0),
+            "end_time": datetime(2026, 3, 16, 0, 0, 0),
+            "source_url": "https://www.visitraleigh.com/event/late-night/123/",
+        }
+        _enrich_visitraleigh_event(event, crawl_delay=0)
+        assert event["start_time"] < event["end_time"]
+        # 11pm Mar 16 ET -> 11pm UTC (EST) or 3am Mar 17 UTC (EDT); 1am Mar 17 ET -> next day
+        assert event["end_time"].day >= event["start_time"].day
+
+
+class TestExtractTimesFromVisitRaleighPage:
+    def test_extracts_from_li_times(self):
+        html = '''
+        <li class="info-list-item times">
+            <span class="info-list-label"><strong>Times:</strong></span>
+            <span class="info-list-value">Mon., 7pm</span>
+        </li>
+        '''
+        assert _extract_times_from_visitraleigh_page(html) == ((19, 0), None)
+
+    def test_extracts_range(self):
+        html = '''
+        <li class="times">
+            <span class="info-list-value">7-8pm</span>
+        </li>
+        '''
+        assert _extract_times_from_visitraleigh_page(html) == ((19, 0), (20, 0))
+
+    def test_returns_none_when_no_times(self):
+        html = "<html><body><p>No times here</p></body></html>"
+        assert _extract_times_from_visitraleigh_page(html) is None
 
 
 class TestFetchAndParse:

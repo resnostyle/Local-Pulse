@@ -27,6 +27,9 @@ go/go
 *.swp
 *.swo
 
+# Run guard state (rate limit, locks)
+.run_guard/
+
 # OS
 .DS_Store
 Thumbs.db

@@ -9,11 +9,23 @@ import (
 )
 
 const DefaultPageSize = 20
+
+// NowFunc returns the current time; override in tests for deterministic behavior.
+var NowFunc = func() time.Time { return time.Now().UTC() }
 const MaxPageSize = 100
 
-// ListCategories returns distinct categories ordered alphabetically.
+// startOfToday returns midnight UTC of the current day; used to filter out past dates.
+func startOfToday() time.Time {
+	return NowFunc().Truncate(24 * time.Hour)
+}
+
+// visibleEventsWhere returns the WHERE clause for events that are upcoming or ongoing (end_date in future).
+const visibleEventsWhere = "(start_time >= ?) OR (end_time IS NOT NULL AND end_time >= ?)"
+
+// ListCategories returns distinct categories for visible events (upcoming or ongoing).
 func ListCategories(db *sql.DB) ([]string, error) {
-	rows, err := db.Query("SELECT DISTINCT category FROM events WHERE category IS NOT NULL AND category != '' ORDER BY category ASC")
+	cutoff := startOfToday()
+	rows, err := db.Query("SELECT DISTINCT category FROM events WHERE category IS NOT NULL AND category != '' AND ("+visibleEventsWhere+") ORDER BY category ASC", cutoff, cutoff)
 	if err != nil {
 		return nil, err
 	}
@@ -30,13 +42,8 @@ func ListCategories(db *sql.DB) ([]string, error) {
 	return categories, rows.Err()
 }
 
-// ListEvents returns all events ordered by start_time.
-func ListEvents(db *sql.DB) ([]models.Event, error) {
-	return listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, fingerprint, created_at, updated_at FROM events ORDER BY start_time ASC")
-}
-
-// ListEventsPaginated returns events with limit/offset. Returns (events, totalCount, error).
-func ListEventsPaginated(db *sql.DB, page, pageSize int) ([]models.Event, int, error) {
+// ListAllEventsPaginated returns ALL events (no date filter) with pagination. For admin use.
+func ListAllEventsPaginated(db *sql.DB, page, pageSize int) ([]models.Event, int, error) {
 	if pageSize <= 0 {
 		pageSize = DefaultPageSize
 	}
@@ -58,13 +65,46 @@ func ListEventsPaginated(db *sql.DB, page, pageSize int) ([]models.Event, int, e
 	return events, total, nil
 }
 
-// ListEventsToday returns events starting today (UTC).
-func ListEventsToday(db *sql.DB) ([]models.Event, error) {
-	start, end := todayRange()
-	return listEventsByRange(db, start, end)
+// ListEvents returns visible events (upcoming or ongoing), ordered by start_time.
+func ListEvents(db *sql.DB) ([]models.Event, error) {
+	cutoff := startOfToday()
+	return listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, fingerprint, created_at, updated_at FROM events WHERE ("+visibleEventsWhere+") ORDER BY start_time ASC", cutoff, cutoff)
 }
 
-// ListEventsTodayPaginated returns today's events with pagination.
+// ListEventsPaginated returns visible events (upcoming or ongoing) with limit/offset. Returns (events, totalCount, error).
+func ListEventsPaginated(db *sql.DB, page, pageSize int) ([]models.Event, int, error) {
+	if pageSize <= 0 {
+		pageSize = DefaultPageSize
+	}
+	if pageSize > MaxPageSize {
+		pageSize = MaxPageSize
+	}
+	if page < 1 {
+		page = 1
+	}
+	cutoff := startOfToday()
+	total, err := countEvents(db, "SELECT COUNT(*) FROM events WHERE ("+visibleEventsWhere+")", cutoff, cutoff)
+	if err != nil {
+		return nil, 0, err
+	}
+	offset := (page - 1) * pageSize
+	events, err := listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, fingerprint, created_at, updated_at FROM events WHERE ("+visibleEventsWhere+") ORDER BY start_time ASC LIMIT ? OFFSET ?", cutoff, cutoff, pageSize, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	return events, total, nil
+}
+
+// overlapRangeWhere: events overlapping [rangeStart, rangeEnd) — start_time < rangeEnd AND (end_time IS NULL OR end_time > rangeStart)
+const overlapRangeWhere = "start_time < ? AND (end_time IS NULL OR end_time > ?)"
+
+// ListEventsToday returns events happening today (starting today or ongoing through today).
+func ListEventsToday(db *sql.DB) ([]models.Event, error) {
+	start, end := todayRange()
+	return listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, fingerprint, created_at, updated_at FROM events WHERE ("+overlapRangeWhere+") ORDER BY start_time ASC", end, start)
+}
+
+// ListEventsTodayPaginated returns today's events (including ongoing) with pagination.
 func ListEventsTodayPaginated(db *sql.DB, page, pageSize int) ([]models.Event, int, error) {
 	if pageSize <= 0 {
 		pageSize = DefaultPageSize
@@ -76,25 +116,25 @@ func ListEventsTodayPaginated(db *sql.DB, page, pageSize int) ([]models.Event, i
 		page = 1
 	}
 	start, end := todayRange()
-	total, err := countEvents(db, "SELECT COUNT(*) FROM events WHERE start_time >= ? AND start_time < ?", start, end)
+	total, err := countEvents(db, "SELECT COUNT(*) FROM events WHERE ("+overlapRangeWhere+")", end, start)
 	if err != nil {
 		return nil, 0, err
 	}
 	offset := (page - 1) * pageSize
-	events, err := listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, fingerprint, created_at, updated_at FROM events WHERE start_time >= ? AND start_time < ? ORDER BY start_time ASC LIMIT ? OFFSET ?", start, end, pageSize, offset)
+	events, err := listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, fingerprint, created_at, updated_at FROM events WHERE ("+overlapRangeWhere+") ORDER BY start_time ASC LIMIT ? OFFSET ?", end, start, pageSize, offset)
 	if err != nil {
 		return nil, 0, err
 	}
 	return events, total, nil
 }
 
-// ListEventsWeekend returns events from Saturday 00:00 through Sunday 23:59 (UTC).
+// ListEventsWeekend returns events happening this weekend (starting or ongoing).
 func ListEventsWeekend(db *sql.DB) ([]models.Event, error) {
 	saturday, sunday := weekendRange()
-	return listEventsByRange(db, saturday, sunday)
+	return listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, fingerprint, created_at, updated_at FROM events WHERE ("+overlapRangeWhere+") ORDER BY start_time ASC", sunday, saturday)
 }
 
-// ListEventsWeekendPaginated returns weekend events with pagination.
+// ListEventsWeekendPaginated returns weekend events (including ongoing) with pagination.
 func ListEventsWeekendPaginated(db *sql.DB, page, pageSize int) ([]models.Event, int, error) {
 	if pageSize <= 0 {
 		pageSize = DefaultPageSize
@@ -106,24 +146,25 @@ func ListEventsWeekendPaginated(db *sql.DB, page, pageSize int) ([]models.Event,
 		page = 1
 	}
 	saturday, sunday := weekendRange()
-	total, err := countEvents(db, "SELECT COUNT(*) FROM events WHERE start_time >= ? AND start_time < ?", saturday, sunday)
+	total, err := countEvents(db, "SELECT COUNT(*) FROM events WHERE ("+overlapRangeWhere+")", sunday, saturday)
 	if err != nil {
 		return nil, 0, err
 	}
 	offset := (page - 1) * pageSize
-	events, err := listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, fingerprint, created_at, updated_at FROM events WHERE start_time >= ? AND start_time < ? ORDER BY start_time ASC LIMIT ? OFFSET ?", saturday, sunday, pageSize, offset)
+	events, err := listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, fingerprint, created_at, updated_at FROM events WHERE ("+overlapRangeWhere+") ORDER BY start_time ASC LIMIT ? OFFSET ?", sunday, saturday, pageSize, offset)
 	if err != nil {
 		return nil, 0, err
 	}
 	return events, total, nil
 }
 
-// ListEventsByCategory returns events in the given category.
+// ListEventsByCategory returns visible events (upcoming or ongoing) in the given category.
 func ListEventsByCategory(db *sql.DB, category string) ([]models.Event, error) {
-	return listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, fingerprint, created_at, updated_at FROM events WHERE category = ? ORDER BY start_time ASC", category)
+	cutoff := startOfToday()
+	return listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, fingerprint, created_at, updated_at FROM events WHERE category = ? AND ("+visibleEventsWhere+") ORDER BY start_time ASC", category, cutoff, cutoff)
 }
 
-// ListEventsByCategoryPaginated returns category events with pagination.
+// ListEventsByCategoryPaginated returns visible events (upcoming or ongoing) in category with pagination.
 func ListEventsByCategoryPaginated(db *sql.DB, category string, page, pageSize int) ([]models.Event, int, error) {
 	if pageSize <= 0 {
 		pageSize = DefaultPageSize
@@ -134,12 +175,13 @@ func ListEventsByCategoryPaginated(db *sql.DB, category string, page, pageSize i
 	if page < 1 {
 		page = 1
 	}
-	total, err := countEvents(db, "SELECT COUNT(*) FROM events WHERE category = ?", category)
+	cutoff := startOfToday()
+	total, err := countEvents(db, "SELECT COUNT(*) FROM events WHERE category = ? AND ("+visibleEventsWhere+")", category, cutoff, cutoff)
 	if err != nil {
 		return nil, 0, err
 	}
 	offset := (page - 1) * pageSize
-	events, err := listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, fingerprint, created_at, updated_at FROM events WHERE category = ? ORDER BY start_time ASC LIMIT ? OFFSET ?", category, pageSize, offset)
+	events, err := listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, fingerprint, created_at, updated_at FROM events WHERE category = ? AND ("+visibleEventsWhere+") ORDER BY start_time ASC LIMIT ? OFFSET ?", category, cutoff, cutoff, pageSize, offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -147,12 +189,12 @@ func ListEventsByCategoryPaginated(db *sql.DB, category string, page, pageSize i
 }
 
 func todayRange() (time.Time, time.Time) {
-	start := time.Now().UTC().Truncate(24 * time.Hour)
+	start := NowFunc().Truncate(24 * time.Hour)
 	return start, start.Add(24 * time.Hour)
 }
 
 func weekendRange() (time.Time, time.Time) {
-	now := time.Now().UTC()
+	now := NowFunc()
 	weekday := now.Weekday()
 	var saturday time.Time
 	if weekday == time.Saturday {

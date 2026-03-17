@@ -24,6 +24,15 @@ func main() {
 	}
 
 	funcMap := template.FuncMap{
+		"derefStr": func(s interface{}) string {
+			if s == nil {
+				return ""
+			}
+			if sp, ok := s.(*string); ok && sp != nil {
+				return *sp
+			}
+			return ""
+		},
 		"pathEscape": func(s string) string {
 			return url.PathEscape(s)
 		},
@@ -57,6 +66,7 @@ func main() {
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 	mux.HandleFunc("/health", h.Health)
 	mux.HandleFunc("/", h.Index)
+	mux.HandleFunc("/admin", h.AdminHTML)
 	mux.HandleFunc("/events", h.EventsHTML)
 	mux.HandleFunc("/events/today", h.EventsTodayHTML)
 	mux.HandleFunc("/events/weekend", h.EventsWeekendHTML)
