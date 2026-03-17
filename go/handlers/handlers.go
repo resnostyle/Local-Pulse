@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"encoding/json"
 	"html/template"
 	"net/http"
 	"net/url"
@@ -16,6 +17,18 @@ import (
 type APIHandler struct {
 	DB   *sql.DB
 	Tmpl *template.Template
+}
+
+// Health handles GET /health. Returns 200 if DB is reachable, 503 otherwise.
+func (h *APIHandler) Health(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if err := h.DB.Ping(); err != nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{"status": "unhealthy"})
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 // eventsPageData holds data for the events page.

@@ -55,6 +55,7 @@ func main() {
 	h := &handlers.APIHandler{DB: conn, Tmpl: tmpl}
 	mux := http.NewServeMux()
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+	mux.HandleFunc("/health", h.Health)
 	mux.HandleFunc("/", h.Index)
 	mux.HandleFunc("/events", h.EventsHTML)
 	mux.HandleFunc("/events/today", h.EventsTodayHTML)

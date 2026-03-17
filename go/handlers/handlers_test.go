@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"encoding/json"
+	"errors"
 	"html/template"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +13,70 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 )
+
+func TestHealth_Returns200WhenDBHealthy(t *testing.T) {
+	db, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectPing()
+
+	tmpl := template.Must(template.New("").Parse(""))
+	h := &APIHandler{DB: db, Tmpl: tmpl}
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rec := httptest.NewRecorder()
+
+	h.Health(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("Health: status = %d, want 200", rec.Code)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("Health: invalid JSON: %v", err)
+	}
+	if body["status"] != "ok" {
+		t.Errorf("Health: status = %q, want ok", body["status"])
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+}
+
+func TestHealth_Returns503WhenDBUnhealthy(t *testing.T) {
+	db, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectPing().WillReturnError(errors.New("connection refused"))
+
+	tmpl := template.Must(template.New("").Parse(""))
+	h := &APIHandler{DB: db, Tmpl: tmpl}
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rec := httptest.NewRecorder()
+
+	h.Health(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("Health: status = %d, want 503", rec.Code)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("Health: invalid JSON: %v", err)
+	}
+	if body["status"] != "unhealthy" {
+		t.Errorf("Health: status = %q, want unhealthy", body["status"])
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+}
 
 func TestParsePage(t *testing.T) {
 	tests := []struct {
