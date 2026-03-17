@@ -7,10 +7,17 @@ calendars:
   - url: https://www.visitraleigh.com/event/rss/
     source: "Visit Raleigh"
     type: rss
-  - url: https://www.apexnc.org/common/modules/iCalendar/iCalendar.aspx?catID=14&feed=calendar
+  - url: https://www.apexnc.org/RSSFeed.aspx?ModID=58&CID=All-calendar.xml
     source: "Town of Apex"
-    type: ical
-    city: "Apex"
+    type: rss
+      #  - url: https://www.apexnc.org/common/modules/iCalendar/iCalendar.aspx?catID=14&feed=calendar
+      #    source: "Town of Apex"
+      #    type: ical
+      #    city: "Apex"
+      #  - url: https://www.apexnc.org/common/modules/iCalendar/iCalendar.aspx?catID=38&feed=calendar
+      #    source: "Town of Apex"
+      #    type: ical
+      #    city: "Apex"
   - url: https://www.carync.gov/connect-engage/calendar
     source: "Town of Cary"
     type: html
