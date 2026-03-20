@@ -211,6 +211,37 @@ func weekendRange() (time.Time, time.Time) {
 	return saturday, saturday.Add(48 * time.Hour)
 }
 
+const searchWhere = "(title LIKE ? OR description LIKE ? OR venue LIKE ? OR city LIKE ?)"
+
+// SearchEventsPaginated returns visible events matching the search query with pagination.
+func SearchEventsPaginated(db *sql.DB, query string, page, pageSize int) ([]models.Event, int, error) {
+	if pageSize <= 0 {
+		pageSize = DefaultPageSize
+	}
+	if pageSize > MaxPageSize {
+		pageSize = MaxPageSize
+	}
+	if page < 1 {
+		page = 1
+	}
+	cutoff := startOfToday()
+	pattern := "%" + query + "%"
+	total, err := countEvents(db,
+		"SELECT COUNT(*) FROM events WHERE "+searchWhere+" AND ("+visibleEventsWhere+")",
+		pattern, pattern, pattern, pattern, cutoff, cutoff)
+	if err != nil {
+		return nil, 0, err
+	}
+	offset := (page - 1) * pageSize
+	events, err := listEventsByQuery(db,
+		"SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, recurring, fingerprint, created_at, updated_at FROM events WHERE "+searchWhere+" AND ("+visibleEventsWhere+") ORDER BY start_time ASC LIMIT ? OFFSET ?",
+		pattern, pattern, pattern, pattern, cutoff, cutoff, pageSize, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	return events, total, nil
+}
+
 func listEventsByRange(db *sql.DB, start, end time.Time) ([]models.Event, error) {
 	return listEventsByQuery(db, "SELECT id, title, description, start_time, end_time, venue, city, category, source, source_url, recurring, fingerprint, created_at, updated_at FROM events WHERE start_time >= ? AND start_time < ? ORDER BY start_time ASC", start, end)
 }
