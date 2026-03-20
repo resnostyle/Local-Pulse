@@ -3,38 +3,59 @@
 import tempfile
 from pathlib import Path
 
-import pytest
+import yaml
 
 from config import load_calendar_sources
 
+SAMPLE_CALENDARS = {
+    "calendars": [
+        {"source": "Test RSS", "type": "rss", "url": "https://example.com/feed", "interval_minutes": 360},
+        {"source": "Test ESPN", "type": "espn", "interval_minutes": 120},
+    ]
+}
 
-def test_load_calendar_sources_returns_list():
-    sources = load_calendar_sources()
+
+def _with_config_dir(tmp_path, data=None):
+    """Point config.__file__ at tmp_path, optionally write a calendars.yaml."""
+    if data is not None:
+        (tmp_path / "calendars.yaml").write_text(yaml.dump(data))
+    import config
+    orig = config.__file__
+    config.__file__ = str(tmp_path / "__init__.py")
+    return config, orig
+
+
+def test_load_calendar_sources_returns_list(tmp_path):
+    config, orig = _with_config_dir(tmp_path, SAMPLE_CALENDARS)
+    try:
+        sources = load_calendar_sources()
+    finally:
+        config.__file__ = orig
     assert isinstance(sources, list)
-    assert len(sources) > 0, "calendars.yaml should have sources (packaging/path regression)"
+    assert len(sources) == 2
 
 
-def test_load_calendar_sources_has_expected_structure():
-    """Calendars.yaml should have source, type for each entry. url required for rss, html, ical, nmc_json."""
-    sources = load_calendar_sources()
-    assert sources, "calendar config not found - test requires calendars.yaml"
+def test_load_calendar_sources_has_expected_structure(tmp_path):
+    config, orig = _with_config_dir(tmp_path, SAMPLE_CALENDARS)
+    try:
+        sources = load_calendar_sources()
+    finally:
+        config.__file__ = orig
+
     valid_types = ("rss", "html", "espn", "ical", "nmc_json")
     for s in sources:
         assert "source" in s
         assert "type" in s
         assert s["type"] in valid_types
-        # rss, html, ical, nmc_json require url; espn does not
         if s["type"] in ("rss", "html", "ical", "nmc_json"):
             assert "url" in s
 
 
-def test_load_calendar_sources_missing_file(monkeypatch):
+def test_load_calendar_sources_missing_file(tmp_path):
     """When calendars.yaml is missing, returns empty list."""
-    import config
-    with tempfile.TemporaryDirectory() as tmp:
-        fake_init = Path(tmp) / "config" / "__init__.py"
-        fake_init.parent.mkdir(parents=True, exist_ok=True)
-        fake_init.touch()
-        monkeypatch.setattr(config, "__file__", str(fake_init))
-        result = config.load_calendar_sources()
-        assert result == []
+    config, orig = _with_config_dir(tmp_path)
+    try:
+        result = load_calendar_sources()
+    finally:
+        config.__file__ = orig
+    assert result == []

@@ -6,9 +6,11 @@ go = "1.21"
 _.file = ".env"
 
 [tasks.setup]
-description = "Copy .env.example to .env if missing, install Python and Go deps"
+description = "Copy example configs if missing, install Python and Go deps"
 run = """
 if [ ! -f .env ]; then cp .env.example .env && echo "Created .env from .env.example"; fi
+if [ ! -f python/config/calendars.yaml ] && [ -f python/config/calendars.yaml.example ]; then cp python/config/calendars.yaml.example python/config/calendars.yaml && echo "Created calendars.yaml from example"; fi
+if [ ! -f python/config/espn.yaml ] && [ -f python/config/espn.yaml.example ]; then cp python/config/espn.yaml.example python/config/espn.yaml && echo "Created espn.yaml from example"; fi
 cd python && pip install -r requirements.txt
 cd ../go && go mod tidy
 """

@@ -33,24 +33,50 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | default .Chart.Version | quote
 {{- end }}
 
 {{/*
-MySQL host - internal service or external.
-Bitnami MySQL subchart exposes service as {release}-mysql.
+MySQL host (external)
 */}}
 {{- define "local-pulse.mysqlHost" -}}
-{{- if .Values.mysql.enabled }}
-{{- printf "%s-mysql" .Release.Name }}
-{{- else }}
-{{- .Values.externalMysql.host }}
-{{- end }}
+{{- required "mysql.host is required" .Values.mysql.host }}
 {{- end }}
 
 {{/*
 MySQL port
 */}}
 {{- define "local-pulse.mysqlPort" -}}
-{{- if .Values.mysql.enabled }}
-{{- "3306" }}
-{{- else }}
-{{- .Values.externalMysql.port | default "3306" }}
+{{- .Values.mysql.port | default "3306" }}
 {{- end }}
+
+{{/*
+MySQL username (external, required)
+*/}}
+{{- define "local-pulse.mysqlUsername" -}}
+{{- required "mysql.username is required" .Values.mysql.username }}
+{{- end }}
+
+{{/*
+MySQL database (external, required)
+*/}}
+{{- define "local-pulse.mysqlDatabase" -}}
+{{- required "mysql.database is required" .Values.mysql.database }}
+{{- end }}
+
+{{/*
+Redis service name (chart-managed, in-cluster)
+*/}}
+{{- define "local-pulse.redisHost" -}}
+{{- printf "%s-redis" (include "local-pulse.fullname" .) }}
+{{- end }}
+
+{{/*
+Celery broker URL (redis://host:6379/0)
+*/}}
+{{- define "local-pulse.redisUrl" -}}
+{{- printf "redis://%s:6379/0" (include "local-pulse.redisHost" .) }}
+{{- end }}
+
+{{/*
+Celery result backend URL (redis://host:6379/1)
+*/}}
+{{- define "local-pulse.redisResultUrl" -}}
+{{- printf "redis://%s:6379/1" (include "local-pulse.redisHost" .) }}
 {{- end }}

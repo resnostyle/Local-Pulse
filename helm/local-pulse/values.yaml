@@ -1,8 +1,6 @@
 # Default values for local-pulse
 
 # Image settings - REQUIRED: set repository to ghcr.io/YOUR_GITHUB_ORG for GHCR
-# GHCR requires images as ghcr.io/owner/repo (e.g. ghcr.io/resnostyle/local-pulse-go)
-# Override: --set image.go.repository=ghcr.io/YOUR_ORG --set image.python.repository=ghcr.io/YOUR_ORG
 image:
   go:
     repository: ghcr.io/YOUR_GITHUB_ORG
@@ -26,9 +24,10 @@ go:
       cpu: 100m
       memory: 128Mi
 
-# Python ingestion (CronJob)
-python:
-  schedule: "0 2 * * 0"  # Sunday 2:00 AM UTC
+# Celery worker (executes scrape tasks)
+celeryWorker:
+  replicas: 1
+  concurrency: 4
   resources:
     limits:
       cpu: 500m
@@ -37,57 +36,53 @@ python:
       cpu: 100m
       memory: 256Mi
 
-# MySQL - use built-in or external
-mysql:
-  enabled: true
-  auth:
-    rootPassword: ""  # Required: set via existingSecret or override
-    database: localpulse
-    username: ""       # Required when mysql.enabled
-    password: ""      # Required: set via existingSecret or override
-  primary:
-    persistence:
-      enabled: true
-      size: 8Gi
-  # Schema runs at MySQL first boot via initdbScripts (no post-install race)
-  initdbScripts:
-    init.sql: |
-      -- All timestamps are stored in UTC.
-      CREATE TABLE IF NOT EXISTS events (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        title VARCHAR(500) NOT NULL,
-        description TEXT,
-        start_time DATETIME NOT NULL,
-        end_time DATETIME,
-        venue VARCHAR(255),
-        city VARCHAR(100),
-        category VARCHAR(100),
-        source VARCHAR(255),
-        source_url VARCHAR(1000),
-        fingerprint VARCHAR(64) NOT NULL UNIQUE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        CONSTRAINT chk_end_after_start CHECK (end_time IS NULL OR end_time >= start_time),
-        INDEX idx_start_time (start_time),
-        INDEX idx_city (city),
-        INDEX idx_category (category)
-      );
+# Celery beat (scheduler - only 1 replica)
+celeryBeat:
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
 
-# External MySQL (when mysql.enabled: false)
-externalMysql:
-  host: ""
+# Redis - message broker for Celery (deployed in this chart)
+redis:
+  image: redis:7-alpine
+  persistence:
+    enabled: false        # Set true for durable storage (recommended for production)
+    size: 1Gi
+    storageClass: ""      # Empty uses cluster default
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+# MySQL (deployed separately - provide connection details)
+mysql:
+  host: ""        # Required
   port: "3306"
   database: localpulse
-  username: ""
-  # password from secret
+  username: ""    # Required
+  # password: set via existingSecret or chart-created secret
 
-# Secrets - required: provide MYSQL_PASSWORD via existingSecret or chart-created secret
-# kubectl create secret generic local-pulse-secrets --from-literal=MYSQL_PASSWORD=xxx
-existingSecret: ""  # e.g. local-pulse-secrets; required for MYSQL_PASSWORD
+# Secrets
+# Option 1: Let the chart create a secret from mysqlPassword and openai.apiKey.
+#   Leave existingSecret empty -- the chart creates <release>-local-pulse-secrets.
+# Option 2: Create your own secret and reference it:
+#   kubectl create secret generic my-secrets \
+#     --from-literal=MYSQL_PASSWORD=xxx \
+#     --from-literal=OPENAI_API_KEY=xxx
+#   Then set existingSecret: "my-secrets"
+existingSecret: ""
+mysqlPassword: ""  # Required when existingSecret is empty
 
-# OpenAI (optional - for AI event normalization; only Python CronJob needs it)
+# OpenAI (optional - for AI event normalization)
 openai:
-  apiKey: ""  # Set via existingSecret OPENAI_API_KEY for Python only
+  apiKey: ""
 
 # Ingress
 ingress:

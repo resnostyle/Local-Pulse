@@ -35,7 +35,7 @@ class TestFetchEventsForSource:
             "type": "rss",
         })
         assert result == mock_fetch_rss.return_value
-        mock_fetch_rss.assert_called_once_with("https://example.com/feed", "X", tz="America/New_York")
+        mock_fetch_rss.assert_called_once_with("https://example.com/feed", "X", tz="America/New_York", source_id=None)
 
     @patch("scraper.scraper.fetch_html")
     @patch("scraper.scraper.extract_text")
@@ -55,14 +55,14 @@ class TestFetchEventsForSource:
         assert result["source"]["url"] == "https://example.com/calendar"
 
     @patch("scraper.scraper.fetch_html")
-    def test_html_fetch_failure_returns_empty(self, mock_fetch):
+    def test_html_fetch_failure_returns_none(self, mock_fetch):
         mock_fetch.return_value = None
         result = fetch_events_for_source({
             "url": "https://example.com/calendar",
             "source": "X",
             "type": "html",
         })
-        assert result == []
+        assert result is None
 
     @patch("scraper.scraper.fetch_html")
     @patch("scraper.scraper.extract_text")

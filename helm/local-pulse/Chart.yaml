@@ -2,15 +2,10 @@ apiVersion: v2
 name: local-pulse
 description: Local Pulse - aggregates local events from multiple websites
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: "1.0.0"
 keywords:
   - events
   - calendar
   - aggregation
 maintainers: []
-dependencies:
-  - name: mysql
-    version: "14.x.x"
-    repository: https://charts.bitnami.com/bitnami
-    condition: mysql.enabled

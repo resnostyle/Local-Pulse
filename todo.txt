@@ -6,28 +6,28 @@ Build a site that aggregates local events from multiple websites so users do not
 
 ## Architecture
 
-Two services sharing one database.
+Three logical components sharing one database.
 
 ```
-Python Service (data ingestion)
-        |
-        | writes events
-        v
-MySQL
-        ^
-        | reads events
-Go Service (web server + API)
-        |
-Go templates + HTMX
-        |
-Browser
+calendars.yaml
+      |
+      v
+Celery Beat (scheduler)
+      |
+      v
+Redis (broker)  <-->  Celery Workers
+                           |
+                           | writes events
+                           v
+                         MySQL
+                           ^
+                           | reads events
+                    Go Service (web)
+                           |
+                    Go templates + HTMX
+                           |
+                        Browser
 ```
-
-Relevant software:
-
-* MySQL
-* HTMX
-* go-sql-driver/mysql
 
 No direct communication between the Go and Python services. Both read/write through the database.
 
@@ -35,25 +35,25 @@ No direct communication between the Go and Python services. Both read/write thro
 
 ## Service Responsibilities
 
-### Python Service
+### Python Service (Celery Workers)
 
-Purpose: collect and normalize event data.
+Purpose: collect and normalize event data on a per-source schedule.
 
-Tasks:
+Components:
 
-* Scrape event pages
-* Extract text from calendars
-* Use ChatGPT to convert messy text into structured JSON
-* Insert normalized events into MySQL
-* Deduplicate events
-* Run on a schedule (cron or scheduler)
+* **Celery Beat** reads source intervals from the `sources` table and dispatches `scrape_source` tasks
+* **Celery Workers** execute tasks: fetch, parse/normalize, insert into MySQL
+* **Retry with backoff** is handled by Celery (exponential, capped at 1 hour)
+* **Audit trail** via `scrape_runs` table (every attempt is logged)
+* **Auto-disable** after consecutive failures
 
-Typical tools:
+Source types:
 
-* `playwright` or `requests`
-* `beautifulsoup`
-* OpenAI API
-* `sqlalchemy` or MySQL client
+* RSS/Atom feeds
+* iCal (.ics) feeds
+* WordPress NMC JSON APIs
+* Sports scoreboard APIs
+* HTML pages (AI-normalized via LLM)
 
 ---
 
@@ -68,15 +68,6 @@ Tasks:
 * Provide endpoints for filtering events
 * Return HTML fragments for dynamic updates via HTMX
 
-Example endpoints:
-
-```
-/events
-/events/today
-/events/weekend
-/events/category/music
-```
-
 ---
 
 ## Frontend Approach
@@ -88,80 +79,26 @@ Stack:
 * Go `html/template`
 * HTMX for dynamic UI updates
 
-Benefits:
-
-* Very simple architecture
-* Fast pages
-* No Node build pipeline
-* Easy filtering and search
-
 ---
 
-## Database Schema (simplified)
+## Database
 
-Example event table:
+Three tables (all timestamps UTC):
 
-```
-events
-------
-id
-title
-description
-start_time
-end_time
-venue
-city
-category
-source
-source_url
-fingerprint
-created_at
-updated_at
-```
+* **events** -- title, description, start/end time, venue, city, category, source, fingerprint
+* **sources** -- registered sources with schedule, retry state, conditional request metadata
+* **scrape_runs** -- audit log of every scrape attempt
 
-Indexes:
-
-* start_time
-* city
-* category
-
-Fingerprint field prevents duplicate events.
-
----
-
-## Data Flow
-
-```
-scraper runs
-    ↓
-page scraped
-    ↓
-AI normalizes event data
-    ↓
-event stored in MySQL
-    ↓
-Go site queries events
-    ↓
-HTMX updates page sections dynamically
-```
+Fingerprint field prevents duplicate events via `ON DUPLICATE KEY UPDATE`.
 
 ---
 
 ## Key Design Decisions
 
 * Avoid microservices complexity.
-* Use **two services only**: ingestion (Python) and web (Go).
-* Share a single database.
+* Two codebases: ingestion (Python) and web (Go). Share a single database.
+* Celery + Redis for task orchestration (retry, backoff, concurrency, per-source scheduling).
 * Keep frontend simple with server rendering.
-* Use AI to normalize event data instead of writing fragile parsers.
-
----
-
-## Result
-
-A clean system that can easily support:
-
-* dozens of local event sources
-* automated event ingestion
-* fast browsing and filtering
-* minimal infrastructure complexity.
+* Use AI to normalize unstructured HTML instead of writing fragile per-site parsers.
+* Per-source scheduling (sports every 2 hours, RSS every 6 hours, HTML daily).
+* Full observability via scrape_runs table.

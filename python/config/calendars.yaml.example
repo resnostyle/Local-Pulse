@@ -1,0 +1,43 @@
+# Source definitions for the ingestion pipeline.
+# Copy this file to calendars.yaml and customise for your deployment.
+#
+# Each entry becomes a row in the `sources` table after `python main.py sync`.
+#
+# Fields:
+#   source            - Human-readable name (unique key in DB)
+#   type              - Handler: espn | rss | ical | nmc_json | html
+#   url               - Feed / page URL (not needed for espn)
+#   interval_minutes  - How often to scrape (default 360)
+#   Any extra keys are stored as JSON in the sources.config column and
+#   forwarded to the handler (e.g. venue, city, tz, base_url, days_ahead).
+
+calendars:
+  - source: "My Sports Source"
+    type: espn
+    interval_minutes: 120
+
+  - url: https://example.com/events/feed
+    source: "Example RSS Feed"
+    type: rss
+    interval_minutes: 360
+
+  # - url: https://example.com/calendar.ics
+  #   source: "Example iCal"
+  #   type: ical
+  #   venue: "Community Center"
+  #   city: "Anytown"
+  #   interval_minutes: 360
+
+  # - url: https://example.com/wp-json/nmc-feeds/v1/events
+  #   source: "Example NMC JSON"
+  #   type: nmc_json
+  #   venue: "City Park"
+  #   city: "Anytown"
+  #   tz: "America/New_York"
+  #   days_ahead: 90
+  #   interval_minutes: 360
+
+  # - url: https://example.com/events
+  #   source: "Example HTML Page"
+  #   type: html
+  #   interval_minutes: 1440

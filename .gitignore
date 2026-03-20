@@ -9,6 +9,7 @@ env/
 .Python
 *.egg-info/
 .eggs/
+.pytest_cache/
 
 # Go
 bin/
@@ -16,20 +17,31 @@ bin/
 *.test
 go/go
 
+# Celery
+celerybeat-schedule
+celerybeat-schedule.db
+
 # Environment
 .env
 .env.*
 !.env.example
 
-# IDE
+# IDE / Editor
+.cursor/
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# Run guard state (rate limit, locks)
-.run_guard/
-
 # OS
 .DS_Store
 Thumbs.db
+
+# Helm
+helm/local-pulse/charts/
+
+# Docker
+docker-compose.override.yml
+
+# Redis
+dump.rdb
