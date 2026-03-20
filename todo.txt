@@ -1,0 +1,104 @@
+### Goal
+
+Build a site that aggregates local events from multiple websites so users do not need to search multiple calendars.
+
+---
+
+## Architecture
+
+Three logical components sharing one database.
+
+```
+calendars.yaml
+      |
+      v
+Celery Beat (scheduler)
+      |
+      v
+Redis (broker)  <-->  Celery Workers
+                           |
+                           | writes events
+                           v
+                         MySQL
+                           ^
+                           | reads events
+                    Go Service (web)
+                           |
+                    Go templates + HTMX
+                           |
+                        Browser
+```
+
+No direct communication between the Go and Python services. Both read/write through the database.
+
+---
+
+## Service Responsibilities
+
+### Python Service (Celery Workers)
+
+Purpose: collect and normalize event data on a per-source schedule.
+
+Components:
+
+* **Celery Beat** reads source intervals from the `sources` table and dispatches `scrape_source` tasks
+* **Celery Workers** execute tasks: fetch, parse/normalize, insert into MySQL
+* **Retry with backoff** is handled by Celery (exponential, capped at 1 hour)
+* **Audit trail** via `scrape_runs` table (every attempt is logged)
+* **Auto-disable** after consecutive failures
+
+Source types:
+
+* RSS/Atom feeds
+* iCal (.ics) feeds
+* WordPress NMC JSON APIs
+* Sports scoreboard APIs
+* HTML pages (AI-normalized via LLM)
+
+---
+
+### Go Service
+
+Purpose: serve the website.
+
+Tasks:
+
+* Query events from MySQL
+* Render pages using Go templates
+* Provide endpoints for filtering events
+* Return HTML fragments for dynamic updates via HTMX
+
+---
+
+## Frontend Approach
+
+Use **server-rendered HTML** instead of a heavy JavaScript framework.
+
+Stack:
+
+* Go `html/template`
+* HTMX for dynamic UI updates
+
+---
+
+## Database
+
+Three tables (all timestamps UTC):
+
+* **events** -- title, description, start/end time, venue, city, category, source, fingerprint
+* **sources** -- registered sources with schedule, retry state, conditional request metadata
+* **scrape_runs** -- audit log of every scrape attempt
+
+Fingerprint field prevents duplicate events via `ON DUPLICATE KEY UPDATE`.
+
+---
+
+## Key Design Decisions
+
+* Avoid microservices complexity.
+* Two codebases: ingestion (Python) and web (Go). Share a single database.
+* Celery + Redis for task orchestration (retry, backoff, concurrency, per-source scheduling).
+* Keep frontend simple with server rendering.
+* Use AI to normalize unstructured HTML instead of writing fragile per-site parsers.
+* Per-source scheduling (sports every 2 hours, RSS every 6 hours, HTML daily).
+* Full observability via scrape_runs table.

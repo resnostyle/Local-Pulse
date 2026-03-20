@@ -1,0 +1,27 @@
+# Sports / ESPN handler configuration.
+# Copy this file to espn.yaml and customise for your region.
+#
+# The ESPN handler fetches scoreboard data from ESPN's public API and
+# filters events by state and team location.
+
+espn:
+  api_base_url: "https://site.api.espn.com/apis/site/v2/sports"
+  game_url_template: "https://www.espn.com/game/_/gameId/{id}"
+
+  # Filter: only keep events in this state or involving these teams
+  state: "Your State"
+  state_code: "XX"
+
+  # Team locations (team.team.location values) that indicate local teams
+  team_locations:
+    - "City Name"
+    # - "University Name"
+
+  # Leagues to poll (sport + league from ESPN's API path)
+  leagues:
+    - sport: basketball
+      league: nba
+    - sport: football
+      league: nfl
+    # - sport: basketball
+    #   league: mens-college-basketball
