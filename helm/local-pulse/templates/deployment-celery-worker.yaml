@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "local-pulse.fullname" . }}-celery-worker
+  labels:
+    {{- include "local-pulse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: celery-worker
+spec:
+  replicas: {{ .Values.celeryWorker.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: celery-worker
+      app.kubernetes.io/name: {{ include "local-pulse.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: celery-worker
+        {{- include "local-pulse.labels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: celery-worker
+          image: "{{ .Values.image.python.repository }}/{{ .Values.image.python.name }}:{{ .Values.image.python.tag }}"
+          imagePullPolicy: {{ .Values.image.python.pullPolicy }}
+          command:
+            - celery
+            - -A
+            - celery_app
+            - worker
+            - --loglevel=info
+            - --concurrency={{ .Values.celeryWorker.concurrency }}
+          env:
+            - name: MYSQL_HOST
+              value: {{ include "local-pulse.mysqlHost" . | quote }}
+            - name: MYSQL_PORT
+              value: {{ include "local-pulse.mysqlPort" . | quote }}
+            - name: MYSQL_USER
+              value: {{ .Values.mysql.username | quote }}
+            - name: MYSQL_DATABASE
+              value: {{ .Values.mysql.database | quote }}
+            - name: CELERY_BROKER_URL
+              value: {{ include "local-pulse.redisUrl" . | quote }}
+            - name: CELERY_RESULT_BACKEND
+              value: {{ include "local-pulse.redisResultUrl" . | quote }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.existingSecret | default (printf "%s-secrets" (include "local-pulse.fullname" .)) }}
+          volumeMounts:
+            - name: calendars
+              mountPath: /app/config/calendars.yaml
+              subPath: calendars.yaml
+              readOnly: true
+          resources:
+            {{- toYaml .Values.celeryWorker.resources | nindent 12 }}
+      volumes:
+        - name: calendars
+          configMap:
+            name: {{ include "local-pulse.fullname" . }}-calendars

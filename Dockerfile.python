@@ -1,22 +1,18 @@
-# Python ingestion service
+# Python ingestion service (used by celery-worker, celery-beat, and one-shot runs)
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install dependencies (exclude playwright - not needed for containerized scraping)
 COPY python/requirements.txt .
 RUN grep -v playwright requirements.txt > requirements-docker.txt && \
     pip install --no-cache-dir -r requirements-docker.txt
 
-# Copy application
 COPY python/ .
-COPY schema/ ./schema/
 
-# calendars.yaml is required for config
 RUN test -f config/calendars.yaml || (echo "config/calendars.yaml missing" && exit 1)
 
 RUN adduser --disabled-password --gecos "" appuser && \
     chown -R appuser:appuser /app
 USER appuser
 
-CMD ["python", "main.py", "schedule"]
+CMD ["celery", "-A", "celery_app", "worker", "--loglevel=info", "--concurrency=4"]

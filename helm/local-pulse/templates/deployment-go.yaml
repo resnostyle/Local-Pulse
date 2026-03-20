@@ -10,7 +10,8 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/component: go
-      {{- include "local-pulse.labels" . | nindent 6 }}
+      app.kubernetes.io/name: {{ include "local-pulse.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
   template:
     metadata:
       labels:
@@ -38,9 +39,9 @@ spec:
             - name: MYSQL_PORT
               value: {{ include "local-pulse.mysqlPort" . | quote }}
             - name: MYSQL_USER
-              value: {{ .Values.mysql.auth.username | default .Values.externalMysql.username | quote }}
+              value: {{ .Values.mysql.username | quote }}
             - name: MYSQL_DATABASE
-              value: {{ .Values.mysql.auth.database | default .Values.externalMysql.database | quote }}
+              value: {{ .Values.mysql.database | quote }}
             - name: MYSQL_PASSWORD
               valueFrom:
                 secretKeyRef:

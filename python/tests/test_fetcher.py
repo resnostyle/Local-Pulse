@@ -72,15 +72,11 @@ class TestFetchHtml:
         assert call_kwargs["timeout"] == 30
 
     @patch("scraper.fetcher.requests.get")
-    @patch("run_guard.get_fetch_metadata")
-    @patch("run_guard.set_fetch_metadata")
-    def test_returns_none_on_304_not_modified(self, mock_set, mock_get_meta, mock_get):
-        mock_get_meta.return_value = {"etag": "abc"}
+    def test_returns_none_on_304_not_modified(self, mock_get):
         mock_get.return_value.status_code = 304
 
         result = fetch_with_conditional("https://example.com/feed")
         assert result is None
-        mock_set.assert_not_called()
 
 
 class TestGetCrawlDelay:

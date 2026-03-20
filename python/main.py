@@ -4,18 +4,8 @@ import argparse
 import logging
 import sys
 
-from apscheduler.schedulers.blocking import BlockingScheduler
-from apscheduler.triggers.cron import CronTrigger
-
-from config import (
-    RUN_MIN_INTERVAL_SECONDS,
-    SCHEDULE_CRON,
-    load_calendar_sources,
-)
-from db import events as db_events
-from normalizer import normalizer as norm
-from run_guard import endpoint_id, run_guard
-from scraper import scraper as scrap
+from config import load_calendar_sources
+from db.sources import ensure_tables, get_due_sources, get_enabled_sources, sync_from_yaml
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,122 +16,171 @@ logger = logging.getLogger(__name__)
 
 
 def _filter_sources(sources: list[dict], only: list[str]) -> list[dict]:
-    """Filter sources to those matching --only (by source name or endpoint_id)."""
+    """Filter sources to those matching --only (by source name)."""
     if not only:
         return sources
     only_set = {s.strip().lower() for s in only if s.strip()}
-    filtered = []
-    for src in sources:
-        name = (src.get("source") or "").lower()
-        eid = endpoint_id(src).lower()
-        if name in only_set or eid in only_set or any(o in name or o in eid for o in only_set):
-            filtered.append(src)
-    return filtered
+    return [
+        src
+        for src in sources
+        if src["name"].lower() in only_set
+        or any(o in src["name"].lower() for o in only_set)
+    ]
 
 
-def run_pipeline(only: list[str] | None = None, force: bool = False) -> int:
-    """Run the full ingestion pipeline: scrape, normalize, insert.
+def _sync() -> None:
+    """Ensure DB tables exist and sync YAML sources into the sources table."""
+    ensure_tables()
+    sync_from_yaml(load_calendar_sources())
 
-    Args:
-        only: If set, run only these sources (by name or endpoint_id).
-        force: If True, bypass rate limit (still uses mutex).
-    """
-    sources = load_calendar_sources()
+
+def run_async(only: list[str] | None = None) -> int:
+    """Dispatch scrape tasks to Celery workers."""
+    from tasks import scrape_source
+
+    _sync()
+    sources = get_enabled_sources()
+    sources = _filter_sources(sources, only or [])
+
     if not sources:
-        logger.warning("No calendar sources configured")
+        logger.warning("No sources to run")
         return 0
+
+    dispatched = 0
+    for src in sources:
+        scrape_source.delay(src["id"])
+        dispatched += 1
+        logger.info("Dispatched task for %s (id=%d)", src["name"], src["id"])
+
+    logger.info("Dispatched %d tasks", dispatched)
+    return dispatched
+
+
+def run_sync(only: list[str] | None = None, force: bool = False) -> int:
+    """Run pipeline inline (no Celery) for debugging and local dev."""
+    from db import events as db_events
+    from db.sources import record_run
+    from normalizer import normalizer as norm
+    from scraper import scraper as scrap
+    import time
+
+    _sync()
+
+    if force:
+        sources = get_enabled_sources()
+    else:
+        sources = get_due_sources()
 
     sources = _filter_sources(sources, only or [])
+
     if not sources:
-        logger.warning("No sources match --only %s", only)
+        logger.warning("No sources due for scraping")
         return 0
+
     if only:
-        logger.info("Running only: %s", [s.get("source") or s.get("url", "?") for s in sources])
+        logger.info("Running only: %s", [s["name"] for s in sources])
 
     total_inserted = 0
-    for source in sources:
-        with run_guard(
-            source,
-            min_interval_seconds=RUN_MIN_INTERVAL_SECONDS,
-            force=force,
-        ) as (ok, _eid):
-            if not ok:
+    for source_row in sources:
+        import json
+
+        source = {
+            "source": source_row["name"],
+            "type": source_row["source_type"],
+            "url": source_row.get("url") or "",
+        }
+        config_raw = source_row.get("config")
+        if config_raw:
+            if isinstance(config_raw, str):
+                config_raw = json.loads(config_raw)
+            source.update(config_raw)
+
+        started = time.time()
+        try:
+            result = scrap.fetch_events_for_source(source)
+            if result is None:
+                duration_ms = int((time.time() - started) * 1000)
+                record_run(source_id=source_row["id"], status="no_change", duration_ms=duration_ms)
                 continue
-            try:
-                result = scrap.fetch_events_for_source(source)
-                if isinstance(result, list):
-                    events = result
-                else:
-                    events = norm.normalize(result["text"], result["source"])
-                if events:
-                    total_inserted += db_events.insert_events(events)
-            except Exception as e:
-                ident = source.get("url") or source.get("source", "?")
-                logger.exception("Failed to process %s: %s", ident, e)
+
+            if isinstance(result, list):
+                events = result
+            elif isinstance(result, dict) and "text" in result:
+                events = norm.normalize(result["text"], result["source"])
+            else:
+                events = []
+
+            inserted = db_events.insert_events(events) if events else 0
+            total_inserted += inserted
+            duration_ms = int((time.time() - started) * 1000)
+
+            record_run(
+                source_id=source_row["id"],
+                status="success" if events else "no_change",
+                events_found=len(events),
+                events_inserted=inserted,
+                duration_ms=duration_ms,
+            )
+        except Exception as e:
+            duration_ms = int((time.time() - started) * 1000)
+            record_run(
+                source_id=source_row["id"],
+                status="error",
+                duration_ms=duration_ms,
+                error_message=str(e)[:2000],
+            )
+            logger.exception("Failed to process %s: %s", source_row["name"], e)
 
     logger.info("Pipeline complete: %d events inserted/updated", total_inserted)
     return total_inserted
 
 
 def main() -> None:
-    """CLI entry: run (one-shot) or schedule (weekly daemon)."""
     parser = argparse.ArgumentParser(
         description="Local Pulse ingestion",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python main.py run                    # Run all sources (rate limited)
-  python main.py run --only espn        # Run only ESPN
-  python main.py run --only espn "Visit Raleigh"
-  python main.py run --force            # Bypass rate limit
-  python main.py schedule               # Run weekly via cron
+  python main.py run                        # Dispatch all due sources to Celery
+  python main.py run --only espn            # Dispatch only ESPN
+  python main.py run --sync                 # Run inline (no Celery, for debugging)
+  python main.py run --sync --only espn     # Run ESPN inline
+  python main.py run --sync --force         # Run all sources inline, ignore schedule
+  python main.py sync                       # Sync YAML to DB without running
         """,
     )
     parser.add_argument(
         "command",
-        choices=["run", "schedule"],
-        help="run = one-shot; schedule = weekly daemon",
+        choices=["run", "sync"],
+        help="run = scrape sources; sync = sync YAML to DB only",
     )
     parser.add_argument(
         "--only",
         action="append",
         metavar="SOURCE",
-        help="Run only these sources (by name, e.g. ESPN or 'Visit Raleigh'). Can repeat.",
+        help="Run only these sources (by name). Can repeat.",
+    )
+    parser.add_argument(
+        "--sync",
+        action="store_true",
+        dest="run_sync",
+        help="Run inline without Celery (for debugging/local dev).",
     )
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Bypass rate limit (min interval between runs). Mutex still applies.",
+        help="Bypass schedule interval (only with --sync).",
     )
     args = parser.parse_args()
 
-    if args.command == "run":
-        run_pipeline(only=args.only, force=args.force)
-    elif args.command == "schedule":
-        # Parse SCHEDULE_CRON (e.g. "0 2 * * 0" = min hour day month weekday)
-        parts = SCHEDULE_CRON.split()
-        if len(parts) >= 5:
-            trigger = CronTrigger(
-                minute=parts[0],
-                hour=parts[1],
-                day=parts[2],
-                month=parts[3],
-                day_of_week=parts[4],
-            )
+    if args.command == "sync":
+        _sync()
+        logger.info("YAML synced to sources table")
+    elif args.command == "run":
+        if args.run_sync:
+            run_sync(only=args.only, force=args.force)
         else:
-            logger.warning(
-                "SCHEDULE_CRON %r invalid (fewer than 5 parts); using default Sunday 2:00 AM UTC",
-                SCHEDULE_CRON,
-            )
-            trigger = CronTrigger(day_of_week="sun", hour=2, minute=0)
-        scheduler = BlockingScheduler()
-        scheduler.add_job(
-            run_pipeline,
-            trigger,
-            kwargs={"only": args.only, "force": args.force},
-        )
-        logger.info("Scheduler started (cron=%s)", SCHEDULE_CRON)
-        scheduler.start()
+            run_async(only=args.only)
 
 
 if __name__ == "__main__":
