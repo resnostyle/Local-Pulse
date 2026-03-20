@@ -7,15 +7,6 @@ espn:
   # Team locations (team.team.location) that indicate in-state teams
   team_locations:
     - Charlotte   # Hornets
-    - Carolina    # Panthers
-    - NC State
-    - Duke
-    - North Carolina
-    - Wake Forest
   leagues:
     - sport: basketball
       league: nba
-    - sport: basketball
-      league: mens-college-basketball
-    - sport: football
-      league: nfl

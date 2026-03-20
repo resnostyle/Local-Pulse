@@ -2,19 +2,3 @@ calendars:
   - source: "ESPN"
     type: espn
     interval_minutes: 120
-  - url: https://downtowncarypark.com/wp-json/nmc-feeds/v1/events
-    source: "Downtown Cary Park"
-    type: nmc_json
-    interval_minutes: 360
-  - url: https://www.visitraleigh.com/event/rss/
-    source: "Visit Raleigh"
-    type: rss
-    interval_minutes: 360
-  - url: https://www.apexnc.org/RSSFeed.aspx?ModID=58&CID=All-calendar.xml
-    source: "Town of Apex"
-    type: rss
-    interval_minutes: 360
-  - url: https://www.carync.gov/connect-engage/calendar
-    source: "Town of Cary"
-    type: html
-    interval_minutes: 1440
