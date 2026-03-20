@@ -11,7 +11,7 @@ Local Pulse has been deployed.
 
 2. Celery workers are processing scrape tasks. Check status:
   kubectl get pods -l "app.kubernetes.io/component=celery-worker,app.kubernetes.io/instance={{ .Release.Name }}"
-  kubectl logs -l "app.kubernetes.io/component=celery-worker" --tail=50
+  kubectl logs -l "app.kubernetes.io/component=celery-worker,app.kubernetes.io/instance={{ .Release.Name }}" --tail=50
 
 3. Celery beat is scheduling tasks per source interval. Check status:
   kubectl get pods -l "app.kubernetes.io/component=celery-beat,app.kubernetes.io/instance={{ .Release.Name }}"

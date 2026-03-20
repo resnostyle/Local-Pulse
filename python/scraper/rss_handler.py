@@ -183,7 +183,7 @@ def _extract_dates_from_description(description: str, pub_date: Optional[datetim
     return None, None
 
 
-def fetch_and_parse(url: str, source_name: str, tz: str = "America/New_York") -> list[dict]:
+def fetch_and_parse(url: str, source_name: str, tz: str = "America/New_York", source_id: int | None = None) -> list[dict]:
     """Fetch RSS feed and parse into event dicts.
 
     Uses conditional fetch (ETag/Last-Modified) when available to skip
@@ -193,6 +193,7 @@ def fetch_and_parse(url: str, source_name: str, tz: str = "America/New_York") ->
         url: RSS feed URL
         source_name: Human-readable source name
         tz: Timezone for parsing times from detail pages (default America/New_York)
+        source_id: DB source id for conditional fetch metadata
 
     Returns:
         List of event dicts with keys: title, description, start_time, end_time,
@@ -200,7 +201,7 @@ def fetch_and_parse(url: str, source_name: str, tz: str = "America/New_York") ->
     """
     from .fetcher import fetch_with_conditional
 
-    content = fetch_with_conditional(url, timeout=DEFAULT_TIMEOUT, user_agent=USER_AGENT)
+    content = fetch_with_conditional(url, timeout=DEFAULT_TIMEOUT, user_agent=USER_AGENT, source_id=source_id)
     if content is None:
         return []
 

@@ -21,6 +21,7 @@ spec:
       containers:
         - name: redis
           image: {{ .Values.redis.image | quote }}
+          args: ["--appendonly", "yes"]
           ports:
             - name: redis
               containerPort: 6379
@@ -35,5 +36,11 @@ spec:
               command: ["redis-cli", "ping"]
             initialDelaySeconds: 3
             periodSeconds: 5
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
           resources:
             {{- toYaml .Values.redis.resources | nindent 12 }}
+      volumes:
+        - name: redis-data
+          emptyDir: {}

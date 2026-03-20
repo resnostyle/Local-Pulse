@@ -47,6 +47,20 @@ MySQL port
 {{- end }}
 
 {{/*
+MySQL username (external, required)
+*/}}
+{{- define "local-pulse.mysqlUsername" -}}
+{{- required "mysql.username is required" .Values.mysql.username }}
+{{- end }}
+
+{{/*
+MySQL database (external, required)
+*/}}
+{{- define "local-pulse.mysqlDatabase" -}}
+{{- required "mysql.database is required" .Values.mysql.database }}
+{{- end }}
+
+{{/*
 Redis service name (chart-managed, in-cluster)
 */}}
 {{- define "local-pulse.redisHost" -}}

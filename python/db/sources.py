@@ -61,6 +61,7 @@ def ensure_tables() -> None:
                   finished_at DATETIME,
                   FOREIGN KEY (source_id) REFERENCES sources(id),
                   INDEX idx_source_status (source_id, status),
+                  INDEX idx_source_started (source_id, started_at),
                   INDEX idx_started (started_at)
                 )
             """)
@@ -103,6 +104,7 @@ def sync_from_yaml(calendars: list[dict]) -> None:
                         """UPDATE sources
                            SET source_type = %s, url = %s, config = %s,
                                schedule_interval_minutes = %s, enabled = 1,
+                               retry_count = 0, backoff_until = NULL,
                                updated_at = CURRENT_TIMESTAMP
                            WHERE name = %s""",
                         (source_type, url, config_json, interval, name),
@@ -275,24 +277,33 @@ def set_fetch_metadata(
     etag: Optional[str] = None,
     last_modified: Optional[str] = None,
 ) -> None:
-    """Store ETag/Last-Modified after a successful fetch."""
+    """Store ETag/Last-Modified after a successful fetch.
+
+    None values are written as NULL to clear stale validators.
+    """
     conn = _conn()
     try:
         with conn.cursor() as cur:
-            updates = []
-            params = []
-            if etag is not None:
-                updates.append("etag = %s")
-                params.append(etag)
-            if last_modified is not None:
-                updates.append("last_modified = %s")
-                params.append(last_modified)
-            if updates:
-                params.append(source_id)
-                cur.execute(
-                    f"UPDATE sources SET {', '.join(updates)} WHERE id = %s",
-                    params,
-                )
+            cur.execute(
+                "UPDATE sources SET etag = %s, last_modified = %s WHERE id = %s",
+                (etag, last_modified, source_id),
+            )
         conn.commit()
     finally:
         conn.close()
+
+
+def row_to_source_dict(row: dict) -> dict:
+    """Convert a sources DB row to the dict format scraper handlers expect."""
+    source = {
+        "source": row["name"],
+        "type": row["source_type"],
+        "url": row.get("url") or "",
+        "id": row["id"],
+    }
+    config_raw = row.get("config")
+    if config_raw:
+        if isinstance(config_raw, str):
+            config_raw = json.loads(config_raw)
+        source.update(config_raw)
+    return source

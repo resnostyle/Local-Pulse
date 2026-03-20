@@ -66,13 +66,15 @@ mysql:
   # password: set via existingSecret or chart-created secret
 
 # Secrets
-# Either provide an existing secret name or set mysql.password + openai.apiKey
-# and the chart will create one.
-# kubectl create secret generic local-pulse-secrets \
-#   --from-literal=MYSQL_PASSWORD=xxx \
-#   --from-literal=OPENAI_API_KEY=xxx
+# Option 1: Let the chart create a secret from mysqlPassword and openai.apiKey.
+#   Leave existingSecret empty -- the chart creates <release>-local-pulse-secrets.
+# Option 2: Create your own secret and reference it:
+#   kubectl create secret generic my-secrets \
+#     --from-literal=MYSQL_PASSWORD=xxx \
+#     --from-literal=OPENAI_API_KEY=xxx
+#   Then set existingSecret: "my-secrets"
 existingSecret: ""
-mysqlPassword: ""  # Only used when existingSecret is empty
+mysqlPassword: ""  # Required when existingSecret is empty
 
 # OpenAI (optional - for AI event normalization)
 openai:

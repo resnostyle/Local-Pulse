@@ -1,11 +1,12 @@
 """Local Pulse - Data ingestion service entry point."""
 
 import argparse
+import json
 import logging
-import sys
+import time
 
 from config import load_calendar_sources
-from db.sources import ensure_tables, get_due_sources, get_enabled_sources, sync_from_yaml
+from db.sources import ensure_tables, get_due_sources, get_enabled_sources, row_to_source_dict, sync_from_yaml
 
 logging.basicConfig(
     level=logging.INFO,
@@ -56,13 +57,12 @@ def run_async(only: list[str] | None = None) -> int:
     return dispatched
 
 
-def run_sync(only: list[str] | None = None, force: bool = False) -> int:
+def run_inline(only: list[str] | None = None, force: bool = False) -> int:
     """Run pipeline inline (no Celery) for debugging and local dev."""
     from db import events as db_events
     from db.sources import record_run
     from normalizer import normalizer as norm
     from scraper import scraper as scrap
-    import time
 
     _sync()
 
@@ -82,18 +82,7 @@ def run_sync(only: list[str] | None = None, force: bool = False) -> int:
 
     total_inserted = 0
     for source_row in sources:
-        import json
-
-        source = {
-            "source": source_row["name"],
-            "type": source_row["source_type"],
-            "url": source_row.get("url") or "",
-        }
-        config_raw = source_row.get("config")
-        if config_raw:
-            if isinstance(config_raw, str):
-                config_raw = json.loads(config_raw)
-            source.update(config_raw)
+        source = row_to_source_dict(source_row)
 
         started = time.time()
         try:
@@ -141,12 +130,12 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python main.py run                        # Dispatch all due sources to Celery
-  python main.py run --only espn            # Dispatch only ESPN
-  python main.py run --sync                 # Run inline (no Celery, for debugging)
-  python main.py run --sync --only espn     # Run ESPN inline
-  python main.py run --sync --force         # Run all sources inline, ignore schedule
-  python main.py sync                       # Sync YAML to DB without running
+  python main.py run                          # Dispatch all due sources to Celery
+  python main.py run --only espn              # Dispatch only ESPN
+  python main.py run --inline                 # Run inline (no Celery, for debugging)
+  python main.py run --inline --only espn     # Run ESPN inline
+  python main.py run --inline --force         # Run all sources inline, ignore schedule
+  python main.py sync                         # Sync YAML to DB without running
         """,
     )
     parser.add_argument(
@@ -161,15 +150,15 @@ Examples:
         help="Run only these sources (by name). Can repeat.",
     )
     parser.add_argument(
-        "--sync",
+        "--inline",
         action="store_true",
-        dest="run_sync",
+        dest="run_inline",
         help="Run inline without Celery (for debugging/local dev).",
     )
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Bypass schedule interval (only with --sync).",
+        help="Bypass schedule interval (only with --inline).",
     )
     args = parser.parse_args()
 
@@ -177,8 +166,8 @@ Examples:
         _sync()
         logger.info("YAML synced to sources table")
     elif args.command == "run":
-        if args.run_sync:
-            run_sync(only=args.only, force=args.force)
+        if args.run_inline:
+            run_inline(only=args.only, force=args.force)
         else:
             run_async(only=args.only)
 

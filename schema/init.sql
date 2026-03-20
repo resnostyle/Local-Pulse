@@ -50,5 +50,6 @@ CREATE TABLE IF NOT EXISTS scrape_runs (
   finished_at DATETIME,
   FOREIGN KEY (source_id) REFERENCES sources(id),
   INDEX idx_source_status (source_id, status),
+  INDEX idx_source_started (source_id, started_at),
   INDEX idx_started (started_at)
 );

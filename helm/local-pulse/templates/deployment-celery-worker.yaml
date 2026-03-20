@@ -35,9 +35,9 @@ spec:
             - name: MYSQL_PORT
               value: {{ include "local-pulse.mysqlPort" . | quote }}
             - name: MYSQL_USER
-              value: {{ .Values.mysql.username | quote }}
+              value: {{ include "local-pulse.mysqlUsername" . | quote }}
             - name: MYSQL_DATABASE
-              value: {{ .Values.mysql.database | quote }}
+              value: {{ include "local-pulse.mysqlDatabase" . | quote }}
             - name: CELERY_BROKER_URL
               value: {{ include "local-pulse.redisUrl" . | quote }}
             - name: CELERY_RESULT_BACKEND

@@ -1,4 +1,0 @@
-calendars:
-  - source: "ESPN"
-    type: espn
-    interval_minutes: 120

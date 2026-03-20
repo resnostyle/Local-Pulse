@@ -8,35 +8,17 @@ from celery_app import app
 logger = logging.getLogger(__name__)
 
 
-def _row_to_source_dict(row: dict) -> dict:
-    """Convert a sources DB row back to the dict format handlers expect."""
-    import json
-
-    source = {
-        "source": row["name"],
-        "type": row["source_type"],
-        "url": row.get("url") or "",
-    }
-    config_raw = row.get("config")
-    if config_raw:
-        if isinstance(config_raw, str):
-            config_raw = json.loads(config_raw)
-        source.update(config_raw)
-    return source
-
-
 @app.task(
     bind=True,
     max_retries=5,
     default_retry_delay=60,
     retry_backoff=True,
     retry_backoff_max=3600,
-    acks_late=True,
 )
 def scrape_source(self, source_id: int):
     """Scrape a single source end-to-end: fetch, normalize, insert, record."""
     from db import events as db_events
-    from db.sources import get_source, record_run
+    from db.sources import get_source, record_run, row_to_source_dict
     from normalizer import normalizer as norm
     from scraper import scraper as scrap
 
@@ -44,7 +26,7 @@ def scrape_source(self, source_id: int):
     if not source_row or not source_row["enabled"]:
         return {"status": "skipped", "reason": "disabled or missing"}
 
-    source = _row_to_source_dict(source_row)
+    source = row_to_source_dict(source_row)
     source_name = source_row["name"]
     started = time.time()
 
@@ -101,4 +83,4 @@ def scrape_source(self, source_id: int):
             error_message=str(exc)[:2000],
         )
         logger.exception("Source %s failed: %s", source_name, exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc
