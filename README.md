@@ -138,8 +138,11 @@ Using [mise](https://mise.jdx.dev/):
 ```bash
 mise run setup          # Copy .env and config files, install deps
 mise run db-init        # Start MySQL + Redis, load schema
+mise run python         # Run one-shot ingestion (or start worker/beat below)
 mise run go             # Start web server
 ```
+
+To run continuous ingestion instead, start the Celery worker and beat in separate terminals (see Manual setup below).
 
 Manual setup:
 

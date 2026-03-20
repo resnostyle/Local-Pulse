@@ -136,8 +136,8 @@ For sources that support it, the fetcher stores HTTP `ETag` and `Last-Modified` 
 python main.py sync                       # Sync YAML to sources table
 python main.py run                        # Dispatch all enabled sources to Celery
 python main.py run --only "Source Name"   # Dispatch specific source
-python main.py run --sync                 # Run inline (no Celery needed)
-python main.py run --sync --force         # Run all sources inline, ignore schedule
+python main.py run --inline               # Run inline (no Celery needed)
+python main.py run --inline --force       # Run all sources inline, ignore schedule
 ```
 
 **Celery processes:**

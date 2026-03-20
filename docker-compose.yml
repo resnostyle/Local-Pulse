@@ -35,6 +35,7 @@ services:
       context: .
       dockerfile: Dockerfile.python
     command: celery -A celery_app worker --loglevel=info --concurrency=4
+    restart: unless-stopped
     depends_on:
       redis:
         condition: service_healthy
@@ -51,6 +52,7 @@ services:
       context: .
       dockerfile: Dockerfile.python
     command: celery -A celery_app beat --loglevel=info --scheduler beat_schedule.DatabaseScheduler
+    restart: unless-stopped
     depends_on:
       redis:
         condition: service_healthy

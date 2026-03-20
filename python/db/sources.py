@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import pymysql
@@ -25,7 +25,11 @@ def _conn():
 
 
 def ensure_tables() -> None:
-    """Create sources and scrape_runs tables if they don't exist."""
+    """Create sources and scrape_runs tables if they don't exist.
+
+    NOTE: This DDL mirrors schema/init.sql. Keep both in sync when changing
+    the sources or scrape_runs schema.
+    """
     conn = _conn()
     try:
         with conn.cursor() as cur:
@@ -203,7 +207,7 @@ def record_run(
     http_status: Optional[int] = None,
 ) -> None:
     """Record a scrape run and update source retry state."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     conn = _conn()
     try:
         with conn.cursor() as cur:

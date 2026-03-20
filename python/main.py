@@ -130,7 +130,7 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python main.py run                          # Dispatch all due sources to Celery
+  python main.py run                          # Dispatch all enabled sources to Celery
   python main.py run --only espn              # Dispatch only ESPN
   python main.py run --inline                 # Run inline (no Celery, for debugging)
   python main.py run --inline --only espn     # Run ESPN inline

@@ -46,9 +46,13 @@ celeryBeat:
       cpu: 50m
       memory: 64Mi
 
-# Redis - message broker for Celery (deployed as a plain Deployment in this chart)
+# Redis - message broker for Celery (deployed in this chart)
 redis:
   image: redis:7-alpine
+  persistence:
+    enabled: false        # Set true for durable storage (recommended for production)
+    size: 1Gi
+    storageClass: ""      # Empty uses cluster default
   resources:
     limits:
       cpu: 200m

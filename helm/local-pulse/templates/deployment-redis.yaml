@@ -7,6 +7,8 @@ metadata:
     app.kubernetes.io/component: redis
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/component: redis
@@ -43,4 +45,9 @@ spec:
             {{- toYaml .Values.redis.resources | nindent 12 }}
       volumes:
         - name: redis-data
+          {{- if .Values.redis.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "local-pulse.fullname" . }}-redis
+          {{- else }}
           emptyDir: {}
+          {{- end }}

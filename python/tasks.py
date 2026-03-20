@@ -8,15 +8,15 @@ from celery_app import app
 logger = logging.getLogger(__name__)
 
 
-@app.task(
-    bind=True,
-    max_retries=5,
-    default_retry_delay=60,
-    retry_backoff=True,
-    retry_backoff_max=3600,
-)
+@app.task(bind=True)
 def scrape_source(self, source_id: int):
-    """Scrape a single source end-to-end: fetch, normalize, insert, record."""
+    """Scrape a single source end-to-end: fetch, normalize, insert, record.
+
+    Retry is handled at the source level: record_run(status="error") updates
+    retry_count and backoff_until on the source row, and Beat/get_due_sources
+    skips the source until backoff expires.  This avoids conflicting with
+    Celery's own retry mechanism.
+    """
     from db import events as db_events
     from db.sources import get_source, record_run, row_to_source_dict
     from normalizer import normalizer as norm
@@ -83,4 +83,4 @@ def scrape_source(self, source_id: int):
             error_message=str(exc)[:2000],
         )
         logger.exception("Source %s failed: %s", source_name, exc)
-        raise self.retry(exc=exc) from exc
+        return {"status": "error", "source": source_name, "error": str(exc)[:200]}
