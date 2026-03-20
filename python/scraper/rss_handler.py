@@ -3,7 +3,7 @@
 import logging
 import re
 import time as _time
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 from datetime import datetime, timedelta
 from html import unescape
 from typing import Optional
@@ -311,7 +311,7 @@ def fetch_and_parse(
             "description": description[:5000] if description else None,
             "start_time": start_time,
             "end_time": end_time,
-            "venue": venue,
+            "venue": venue or ev.get("location"),
             "city": city,
             "category": category,
             "source": source_name,
