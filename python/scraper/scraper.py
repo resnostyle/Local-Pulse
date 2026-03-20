@@ -64,7 +64,14 @@ def fetch_events_for_source(source: dict) -> Union[list[dict], dict, None]:
         return []
 
     if source_type == "rss":
-        return fetch_rss(url, source_name, tz=source.get("tz", "America/New_York"), source_id=source_id)
+        return fetch_rss(
+            url,
+            source_name,
+            tz=source.get("tz", "America/New_York"),
+            source_id=source_id,
+            venue=source.get("venue"),
+            city=source.get("city"),
+        )
 
     html = fetch_html(url, source_id=source_id)
     if not html:

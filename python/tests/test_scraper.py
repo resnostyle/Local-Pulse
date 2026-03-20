@@ -35,7 +35,7 @@ class TestFetchEventsForSource:
             "type": "rss",
         })
         assert result == mock_fetch_rss.return_value
-        mock_fetch_rss.assert_called_once_with("https://example.com/feed", "X", tz="America/New_York", source_id=None)
+        mock_fetch_rss.assert_called_once_with("https://example.com/feed", "X", tz="America/New_York", source_id=None, venue=None, city=None)
 
     @patch("scraper.scraper.fetch_html")
     @patch("scraper.scraper.extract_text")

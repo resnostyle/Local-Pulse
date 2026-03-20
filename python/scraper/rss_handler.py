@@ -3,6 +3,7 @@
 import logging
 import re
 import time as _time
+import defusedxml.ElementTree as ET
 from datetime import datetime, timedelta
 from html import unescape
 from typing import Optional
@@ -42,6 +43,47 @@ TIME_RANGE_RE = re.compile(
     re.IGNORECASE,
 )
 RALEIGH_TZ = ZoneInfo("America/New_York")
+
+_EV_NS = "http://purl.org/rss/1.0/modules/event/"
+
+
+def _parse_iso_datetime(s: str) -> Optional[datetime]:
+    """Parse ISO 8601 datetime to naive UTC datetime."""
+    if not s:
+        return None
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return dt.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse_ev_fields(content: str) -> dict[str, dict]:
+    """Extract RSS event-module (ev:) fields from raw XML, keyed by <guid> or <link>."""
+    try:
+        root = ET.fromstring(content.encode("utf-8") if isinstance(content, str) else content)
+    except ET.ParseError:
+        return {}
+
+    result: dict[str, dict] = {}
+    for item in root.iter("item"):
+        guid_el = item.find("guid")
+        link_el = item.find("link")
+        key = (guid_el.text.strip() if guid_el is not None and guid_el.text else None) or (
+            link_el.text.strip() if link_el is not None and link_el.text else None
+        )
+        if not key:
+            continue
+
+        ev_data: dict[str, str] = {}
+        for field in ("startdate", "enddate", "type", "location"):
+            el = item.find(f"{{{_EV_NS}}}{field}")
+            if el is not None and el.text:
+                ev_data[field] = el.text.strip()
+
+        if ev_data:
+            result[key] = ev_data
+    return result
 
 
 def _parse_date(s: str) -> Optional[datetime]:
@@ -183,7 +225,14 @@ def _extract_dates_from_description(description: str, pub_date: Optional[datetim
     return None, None
 
 
-def fetch_and_parse(url: str, source_name: str, tz: str = "America/New_York", source_id: int | None = None) -> list[dict]:
+def fetch_and_parse(
+    url: str,
+    source_name: str,
+    tz: str = "America/New_York",
+    source_id: int | None = None,
+    venue: str | None = None,
+    city: str | None = None,
+) -> list[dict]:
     """Fetch RSS feed and parse into event dicts.
 
     Uses conditional fetch (ETag/Last-Modified) when available to skip
@@ -194,6 +243,8 @@ def fetch_and_parse(url: str, source_name: str, tz: str = "America/New_York", so
         source_name: Human-readable source name
         tz: Timezone for parsing times from detail pages (default America/New_York)
         source_id: DB source id for conditional fetch metadata
+        venue: Default venue name (used when feed doesn't provide one)
+        city: Default city name
 
     Returns:
         List of event dicts with keys: title, description, start_time, end_time,
@@ -206,31 +257,47 @@ def fetch_and_parse(url: str, source_name: str, tz: str = "America/New_York", so
         return []
 
     feed = feedparser.parse(content)
+    ev_fields = _parse_ev_fields(content)
     events = []
 
     for entry in feed.entries:
-        pub_date = None
-        if hasattr(entry, "published_parsed") and entry.published_parsed:
-            st = entry.published_parsed
-            pub_date = datetime(*st[:6])
-
         link = entry.get("link", url)
+        guid = entry.get("id") or link
+        ev = ev_fields.get(guid, {})
+
         title = _strip_html(entry.get("title", ""))
         if not title:
             continue
 
         description = _strip_html(entry.get("description", ""))
-        start_time, end_time = _extract_dates_from_description(description, pub_date)
+
+        # Prefer ev:startdate/ev:enddate (ISO 8601) from the event module
+        ev_start = _parse_iso_datetime(ev.get("startdate", ""))
+        ev_end = _parse_iso_datetime(ev.get("enddate", ""))
+
+        if ev_start:
+            start_time = ev_start
+            end_time = ev_end if ev_end and ev_end != ev_start else None
+        else:
+            pub_date = None
+            if hasattr(entry, "published_parsed") and entry.published_parsed:
+                st = entry.published_parsed
+                pub_date = datetime(*st[:6])
+            elif hasattr(entry, "updated_parsed") and entry.updated_parsed:
+                st = entry.updated_parsed
+                pub_date = datetime(*st[:6])
+            start_time, end_time = _extract_dates_from_description(description, pub_date)
 
         if not start_time:
-            # Skip entries without a deterministic date to avoid nondeterministic fingerprints
             continue
 
-        categories = entry.get("tags", [])
-        category = None
-        if categories:
-            cat = categories[0] if isinstance(categories[0], str) else categories[0].get("term", "")
-            category = cat.strip() if cat else None
+        # Category: prefer ev:type, then RSS <category>
+        category = ev.get("type")
+        if not category:
+            categories = entry.get("tags", [])
+            if categories:
+                cat = categories[0] if isinstance(categories[0], str) else categories[0].get("term", "")
+                category = cat.strip() if cat else None
 
         recurring = bool(
             description
@@ -244,8 +311,8 @@ def fetch_and_parse(url: str, source_name: str, tz: str = "America/New_York", so
             "description": description[:5000] if description else None,
             "start_time": start_time,
             "end_time": end_time,
-            "venue": None,
-            "city": None,
+            "venue": venue or ev.get("location"),
+            "city": city,
             "category": category,
             "source": source_name,
             "source_url": link,
