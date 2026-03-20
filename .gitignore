@@ -39,6 +39,7 @@ Thumbs.db
 
 # Helm
 helm/local-pulse/charts/
+helm/local-pulse/config/calendars.yaml
 
 # Docker
 docker-compose.override.yml

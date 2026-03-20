@@ -9,6 +9,8 @@ from scraper.rss_handler import (
     _extract_dates_from_description,
     _extract_times_from_event_page,
     _parse_date,
+    _parse_ev_fields,
+    _parse_iso_datetime,
     _parse_times_str,
     _strip_html,
     fetch_and_parse,
@@ -164,6 +166,103 @@ class TestExtractTimesFromEventPage:
     def test_returns_none_when_no_times(self):
         html = "<html><body><p>No times here</p></body></html>"
         assert _extract_times_from_event_page(html) is None
+
+
+SAMPLE_EV_RSS = """<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"
+    xmlns:dc="http://purl.org/dc/elements/1.1/"
+    xmlns:ev="http://purl.org/rss/1.0/modules/event/">
+  <channel>
+    <title>DPAC Events</title>
+    <item>
+      <title>Stereophonic</title>
+      <link>https://www.dpacnc.com/events/detail/stereophonic-2026</link>
+      <guid>https://www.dpacnc.com/events/detail/stereophonic-2026</guid>
+      <description>A great show</description>
+      <ev:location>DPAC Official Site</ev:location>
+      <dc:date>2026-03-19T23:30:00Z</dc:date>
+      <ev:startdate>2026-03-19T23:30:00Z</ev:startdate>
+      <ev:enddate>2026-03-22T22:30:00Z</ev:enddate>
+      <ev:type>Broadway</ev:type>
+    </item>
+    <item>
+      <title>Bill Burr Live</title>
+      <link>https://www.dpacnc.com/events/detail/billburr2026</link>
+      <guid>https://www.dpacnc.com/events/detail/billburr2026</guid>
+      <description>Comedy show</description>
+      <ev:startdate>2026-04-08T23:30:00Z</ev:startdate>
+      <ev:enddate>2026-04-08T23:30:00Z</ev:enddate>
+    </item>
+    <item>
+      <title>No Date Event</title>
+      <link>https://www.dpacnc.com/events/detail/nodate</link>
+      <guid>https://www.dpacnc.com/events/detail/nodate</guid>
+      <description>Missing dates</description>
+    </item>
+  </channel>
+</rss>
+"""
+
+
+class TestParseIsoDatetime:
+    def test_utc_z_suffix(self):
+        dt = _parse_iso_datetime("2026-03-19T23:30:00Z")
+        assert dt == datetime(2026, 3, 19, 23, 30, 0)
+        assert dt.tzinfo is None
+
+    def test_with_offset(self):
+        dt = _parse_iso_datetime("2026-03-19T19:30:00-04:00")
+        assert dt == datetime(2026, 3, 19, 23, 30, 0)
+
+    def test_empty_returns_none(self):
+        assert _parse_iso_datetime("") is None
+        assert _parse_iso_datetime(None) is None
+
+    def test_invalid_returns_none(self):
+        assert _parse_iso_datetime("not-a-date") is None
+
+
+class TestParseEvFields:
+    def test_extracts_fields(self):
+        ev = _parse_ev_fields(SAMPLE_EV_RSS)
+        key = "https://www.dpacnc.com/events/detail/stereophonic-2026"
+        assert key in ev
+        assert ev[key]["startdate"] == "2026-03-19T23:30:00Z"
+        assert ev[key]["enddate"] == "2026-03-22T22:30:00Z"
+        assert ev[key]["type"] == "Broadway"
+        assert ev[key]["location"] == "DPAC Official Site"
+
+    def test_items_without_ev_excluded(self):
+        ev = _parse_ev_fields(SAMPLE_EV_RSS)
+        assert "https://www.dpacnc.com/events/detail/nodate" not in ev
+
+    def test_invalid_xml_returns_empty(self):
+        assert _parse_ev_fields("not xml at all") == {}
+
+
+class TestFetchAndParseEvNamespace:
+    @patch("scraper.fetcher.requests.get")
+    def test_parses_ev_startdate_enddate(self, mock_get):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.text = SAMPLE_EV_RSS
+        mock_get.return_value.headers = {}
+        mock_get.return_value.raise_for_status = lambda: None
+
+        events = fetch_and_parse(
+            "https://www.dpacnc.com/events/rss", "DPAC", venue="DPAC", city="Durham",
+        )
+        assert len(events) == 2  # nodate event should be skipped
+        stereo = next(e for e in events if e["title"] == "Stereophonic")
+        assert stereo["start_time"] == datetime(2026, 3, 19, 23, 30, 0)
+        assert stereo["end_time"] == datetime(2026, 3, 22, 22, 30, 0)
+        assert stereo["category"] == "Broadway"
+        assert stereo["venue"] == "DPAC"
+        assert stereo["city"] == "Durham"
+
+        burr = next(e for e in events if e["title"] == "Bill Burr Live")
+        assert burr["start_time"] == datetime(2026, 4, 8, 23, 30, 0)
+        # ev:enddate == ev:startdate → treated as no end time
+        assert burr["end_time"] is None
 
 
 class TestFetchAndParse:
