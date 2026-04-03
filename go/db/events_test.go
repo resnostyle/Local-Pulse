@@ -334,6 +334,132 @@ func TestListEventsWeekendPaginated(t *testing.T) {
 	}
 }
 
+func TestSearchEventsPaginated(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	prev := NowFunc
+	NowFunc = func() time.Time { return fixedNow }
+	defer func() { NowFunc = prev }()
+
+	cutoff := fixedNow.Truncate(24 * time.Hour)
+	pattern := "%jazz%"
+
+	countRows := sqlmock.NewRows([]string{"count"}).AddRow(3)
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM events WHERE \\(title LIKE \\?").
+		WithArgs(pattern, pattern, pattern, pattern, cutoff, cutoff).
+		WillReturnRows(countRows)
+
+	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "recurring", "fingerprint", "created_at", "updated_at"}).
+		AddRow(1, "Jazz Night", "Live jazz", fixedNow, nil, "Club", "Raleigh", "Music", "Source", "https://example.com", false, "fp1", fixedNow, fixedNow).
+		AddRow(2, "Jazz Brunch", nil, fixedNow.Add(time.Hour), nil, "Cafe", "Cary", "Music", "Source", "https://example.com", false, "fp2", fixedNow, fixedNow)
+	mock.ExpectQuery("SELECT id, title, description, start_time").
+		WithArgs(pattern, pattern, pattern, pattern, cutoff, cutoff, 20, 0).
+		WillReturnRows(eventRows)
+
+	events, total, err := SearchEventsPaginated(db, "jazz", 1, 20)
+	if err != nil {
+		t.Errorf("SearchEventsPaginated: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+	if total != 3 {
+		t.Errorf("total = %d, want 3", total)
+	}
+	if len(events) != 2 {
+		t.Errorf("len(events) = %d, want 2", len(events))
+	}
+	if events[0].Title != "Jazz Night" {
+		t.Errorf("events[0].Title = %q, want %q", events[0].Title, "Jazz Night")
+	}
+}
+
+func TestSearchEventsPaginated_NoResults(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	prev := NowFunc
+	NowFunc = func() time.Time { return fixedNow }
+	defer func() { NowFunc = prev }()
+
+	cutoff := fixedNow.Truncate(24 * time.Hour)
+	pattern := "%nonexistent%"
+
+	countRows := sqlmock.NewRows([]string{"count"}).AddRow(0)
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM events WHERE \\(title LIKE \\?").
+		WithArgs(pattern, pattern, pattern, pattern, cutoff, cutoff).
+		WillReturnRows(countRows)
+
+	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "recurring", "fingerprint", "created_at", "updated_at"})
+	mock.ExpectQuery("SELECT id, title, description, start_time").
+		WithArgs(pattern, pattern, pattern, pattern, cutoff, cutoff, 20, 0).
+		WillReturnRows(eventRows)
+
+	events, total, err := SearchEventsPaginated(db, "nonexistent", 1, 20)
+	if err != nil {
+		t.Errorf("SearchEventsPaginated: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+	if total != 0 {
+		t.Errorf("total = %d, want 0", total)
+	}
+	if len(events) != 0 {
+		t.Errorf("len(events) = %d, want 0", len(events))
+	}
+}
+
+func TestSearchEventsPaginated_Page2(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	prev := NowFunc
+	NowFunc = func() time.Time { return fixedNow }
+	defer func() { NowFunc = prev }()
+
+	cutoff := fixedNow.Truncate(24 * time.Hour)
+	pattern := "%music%"
+
+	countRows := sqlmock.NewRows([]string{"count"}).AddRow(25)
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM events WHERE \\(title LIKE \\?").
+		WithArgs(pattern, pattern, pattern, pattern, cutoff, cutoff).
+		WillReturnRows(countRows)
+
+	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "recurring", "fingerprint", "created_at", "updated_at"}).
+		AddRow(21, "Music Fest", nil, fixedNow, nil, "Park", "Raleigh", "Music", "Source", "https://example.com", false, "fp21", fixedNow, fixedNow)
+	mock.ExpectQuery("SELECT id, title, description, start_time").
+		WithArgs(pattern, pattern, pattern, pattern, cutoff, cutoff, 20, 20).
+		WillReturnRows(eventRows)
+
+	events, total, err := SearchEventsPaginated(db, "music", 2, 20)
+	if err != nil {
+		t.Errorf("SearchEventsPaginated: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+	if total != 25 {
+		t.Errorf("total = %d, want 25", total)
+	}
+	if len(events) != 1 {
+		t.Errorf("len(events) = %d, want 1", len(events))
+	}
+}
+
 func TestListAllEventsPaginated(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {

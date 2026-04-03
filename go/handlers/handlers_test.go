@@ -494,3 +494,161 @@ func TestAdminHTML_NotFoundForNonAdmin(t *testing.T) {
 		t.Errorf("AdminHTML for /admin/foo: status = %d, want 404", rec.Code)
 	}
 }
+
+func TestSearchEventsHTML_Returns200(t *testing.T) {
+	h, mock := newTestHandler(t)
+	defer h.DB.Close()
+
+	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	oldNow := db.NowFunc
+	db.NowFunc = func() time.Time { return fixedNow }
+	t.Cleanup(func() { db.NowFunc = oldNow })
+	cutoff := fixedNow.Truncate(24 * time.Hour)
+	pattern := "%jazz%"
+
+	countRows := sqlmock.NewRows([]string{"count"}).AddRow(1)
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM events WHERE \\(title LIKE").
+		WithArgs(pattern, pattern, pattern, pattern, cutoff, cutoff).
+		WillReturnRows(countRows)
+
+	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "recurring", "fingerprint", "created_at", "updated_at"}).
+		AddRow(1, "Jazz Night", nil, fixedNow, nil, "Club", "Raleigh", "Music", "Source", "https://example.com", false, "fp1", fixedNow, fixedNow)
+	mock.ExpectQuery("SELECT id, title, description, start_time").
+		WithArgs(pattern, pattern, pattern, pattern, cutoff, cutoff, db.DefaultPageSize, 0).
+		WillReturnRows(eventRows)
+
+	rows := sqlmock.NewRows([]string{"category"})
+	mock.ExpectQuery("SELECT DISTINCT category FROM events").
+		WithArgs(cutoff, cutoff).
+		WillReturnRows(rows)
+
+	req := httptest.NewRequest(http.MethodGet, "/events/search?q=jazz", nil)
+	rec := httptest.NewRecorder()
+
+	h.SearchEventsHTML(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("SearchEventsHTML: status = %d, want 200", rec.Code)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+}
+
+func TestSearchEventsHTML_HTMXReturnsCards(t *testing.T) {
+	h, mock := newTestHandler(t)
+	defer h.DB.Close()
+
+	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	oldNow := db.NowFunc
+	db.NowFunc = func() time.Time { return fixedNow }
+	t.Cleanup(func() { db.NowFunc = oldNow })
+	cutoff := fixedNow.Truncate(24 * time.Hour)
+	pattern := "%jazz%"
+
+	countRows := sqlmock.NewRows([]string{"count"}).AddRow(0)
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM events WHERE \\(title LIKE").
+		WithArgs(pattern, pattern, pattern, pattern, cutoff, cutoff).
+		WillReturnRows(countRows)
+
+	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "recurring", "fingerprint", "created_at", "updated_at"})
+	mock.ExpectQuery("SELECT id, title, description, start_time").
+		WithArgs(pattern, pattern, pattern, pattern, cutoff, cutoff, db.DefaultPageSize, 0).
+		WillReturnRows(eventRows)
+
+	rows := sqlmock.NewRows([]string{"category"})
+	mock.ExpectQuery("SELECT DISTINCT category FROM events").
+		WithArgs(cutoff, cutoff).
+		WillReturnRows(rows)
+
+	req := httptest.NewRequest(http.MethodGet, "/events/search?q=jazz", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+
+	h.SearchEventsHTML(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("SearchEventsHTML HTMX: status = %d, want 200", rec.Code)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+}
+
+func TestSearchEventsHTML_EmptyQueryFallsBackToAll(t *testing.T) {
+	h, mock := newTestHandler(t)
+	defer h.DB.Close()
+
+	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	oldNow := db.NowFunc
+	db.NowFunc = func() time.Time { return fixedNow }
+	t.Cleanup(func() { db.NowFunc = oldNow })
+	cutoff := fixedNow.Truncate(24 * time.Hour)
+
+	countRows := sqlmock.NewRows([]string{"count"}).AddRow(0)
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM events WHERE").
+		WithArgs(cutoff, cutoff).
+		WillReturnRows(countRows)
+
+	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "recurring", "fingerprint", "created_at", "updated_at"})
+	mock.ExpectQuery("SELECT id, title, description, start_time").
+		WithArgs(cutoff, cutoff, db.DefaultPageSize, 0).
+		WillReturnRows(eventRows)
+
+	rows := sqlmock.NewRows([]string{"category"})
+	mock.ExpectQuery("SELECT DISTINCT category FROM events").
+		WithArgs(cutoff, cutoff).
+		WillReturnRows(rows)
+
+	req := httptest.NewRequest(http.MethodGet, "/events/search?q=", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+
+	h.SearchEventsHTML(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("SearchEventsHTML empty query: status = %d, want 200", rec.Code)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+}
+
+func TestEventsHTML_AppendReturnsCards(t *testing.T) {
+	h, mock := newTestHandler(t)
+	defer h.DB.Close()
+
+	fixedNow := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	oldNow := db.NowFunc
+	db.NowFunc = func() time.Time { return fixedNow }
+	t.Cleanup(func() { db.NowFunc = oldNow })
+	cutoff := fixedNow.Truncate(24 * time.Hour)
+
+	countRows := sqlmock.NewRows([]string{"count"}).AddRow(50)
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM events").
+		WithArgs(cutoff, cutoff).
+		WillReturnRows(countRows)
+
+	eventRows := sqlmock.NewRows([]string{"id", "title", "description", "start_time", "end_time", "venue", "city", "category", "source", "source_url", "recurring", "fingerprint", "created_at", "updated_at"})
+	mock.ExpectQuery("SELECT id, title, description, start_time").
+		WithArgs(cutoff, cutoff, 20, 20).
+		WillReturnRows(eventRows)
+
+	rows := sqlmock.NewRows([]string{"category"})
+	mock.ExpectQuery("SELECT DISTINCT category FROM events").
+		WithArgs(cutoff, cutoff).
+		WillReturnRows(rows)
+
+	req := httptest.NewRequest(http.MethodGet, "/events?page=2&append=1", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+
+	h.EventsHTML(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("EventsHTML append: status = %d, want 200", rec.Code)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+}

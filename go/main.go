@@ -68,6 +68,7 @@ func main() {
 	mux.HandleFunc("/", h.Index)
 	mux.HandleFunc("/admin", h.AdminHTML)
 	mux.HandleFunc("/events", h.EventsHTML)
+	mux.HandleFunc("/events/search", h.SearchEventsHTML)
 	mux.HandleFunc("/events/today", h.EventsTodayHTML)
 	mux.HandleFunc("/events/weekend", h.EventsWeekendHTML)
 	mux.HandleFunc("/events/category/", h.EventsByCategoryHTML)
