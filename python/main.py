@@ -62,6 +62,7 @@ def run_inline(only: list[str] | None = None, force: bool = False) -> int:
     from db import events as db_events
     from db.sources import record_run
     from normalizer import normalizer as norm
+    from pipeline.raw_writer import write_raw_run
     from scraper import scraper as scrap
 
     _sync()
@@ -98,6 +99,8 @@ def run_inline(only: list[str] | None = None, force: bool = False) -> int:
                 events = norm.normalize(result["text"], result["source"])
             else:
                 events = []
+
+            write_raw_run(source, events)
 
             inserted = db_events.insert_events(events) if events else 0
             total_inserted += inserted

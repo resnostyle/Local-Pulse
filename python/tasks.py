@@ -20,6 +20,7 @@ def scrape_source(self, source_id: int):
     from db import events as db_events
     from db.sources import get_source, record_run, row_to_source_dict
     from normalizer import normalizer as norm
+    from pipeline.raw_writer import write_raw_run
     from scraper import scraper as scrap
 
     source_row = get_source(source_id)
@@ -48,6 +49,8 @@ def scrape_source(self, source_id: int):
             events = norm.normalize(result["text"], result["source"])
         else:
             events = []
+
+        write_raw_run(source, events)
 
         inserted = db_events.insert_events(events) if events else 0
         duration_ms = int((time.time() - started) * 1000)

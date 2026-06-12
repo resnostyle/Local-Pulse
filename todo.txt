@@ -1,104 +1,362 @@
-### Goal
+# Event Scraping Pipeline – Lean Architecture Design
 
-Build a site that aggregates local events from multiple websites so users do not need to search multiple calendars.
+## Overview
+
+This system collects event data from multiple external sources, normalizes and deduplicates it, and serves it to a frontend with minimal infrastructure cost and complexity.
+
+The architecture is designed to:
+
+* Eliminate traditional databases
+* Avoid long-running services
+* Minimize cost via static hosting + CDN
+* Remain scalable across locations
+* Be deterministic and easy to debug
 
 ---
 
-## Architecture
+## High-Level Architecture
 
-Three logical components sharing one database.
+**Pipeline model (batch-oriented):**
+
+1. Scrapers (fan-out)
+2. Raw storage (source of truth)
+3. Reducer (fan-in)
+4. Processed static datasets
+5. CDN delivery to frontend
+
+---
+
+## Core Principles
+
+* Treat the system like a **static data compiler**, not a dynamic API
+* Never mutate existing processed data incrementally
+* Always rebuild outputs from raw inputs
+* Partition data by **location** from day one
+* Optimize for **read-heavy, infrequently changing data**
+
+---
+
+## Data Flow
+
+### 1. Scraping Phase (Fan-Out)
+
+Each scraper:
+
+* Targets a single source (e.g., Eventbrite, Facebook)
+* Runs independently
+* Outputs normalized JSON
+
+Output location:
 
 ```
-calendars.yaml
-      |
-      v
-Celery Beat (scheduler)
-      |
-      v
-Redis (broker)  <-->  Celery Workers
-                           |
-                           | writes events
-                           v
-                         MySQL
-                           ^
-                           | reads events
-                    Go Service (web)
-                           |
-                    Go templates + HTMX
-                           |
-                        Browser
+/raw/{state}/{city}/{source}/{run_id}.json
 ```
 
-No direct communication between the Go and Python services. Both read/write through the database.
+Example:
+
+```
+/raw/nc/raleigh/eventbrite/2026-03-24T10-00.json
+```
+
+### Normalized Schema (example)
+
+```json
+{
+  "source": "eventbrite",
+  "source_id": "abc123",
+  "title": "Food Festival",
+  "start": "2026-03-24T18:00:00",
+  "location": "raleigh",
+  "venue": "Downtown",
+  "url": "https://...",
+  "raw_hash": "xyz"
+}
+```
 
 ---
 
-## Service Responsibilities
+### 2. Storage Layer
 
-### Python Service (Celery Workers)
+Raw data is stored in object storage and treated as immutable.
 
-Purpose: collect and normalize event data on a per-source schedule.
+Characteristics:
 
-Components:
+* Append-only
+* Debuggable
+* Re-runnable
 
-* **Celery Beat** reads source intervals from the `sources` table and dispatches `scrape_source` tasks
-* **Celery Workers** execute tasks: fetch, parse/normalize, insert into MySQL
-* **Retry with backoff** is handled by Celery (exponential, capped at 1 hour)
-* **Audit trail** via `scrape_runs` table (every attempt is logged)
-* **Auto-disable** after consecutive failures
-
-Source types:
-
-* RSS/Atom feeds
-* iCal (.ics) feeds
-* WordPress NMC JSON APIs
-* Sports scoreboard APIs
-* HTML pages (AI-normalized via LLM)
+Raw data = **source of truth**
 
 ---
 
-### Go Service
+### 3. Triggering the Reducer
 
-Purpose: serve the website.
+Scraper uploads trigger a reducer indirectly.
 
-Tasks:
+**Do NOT merge immediately on upload.**
 
-* Query events from MySQL
-* Render pages using Go templates
-* Provide endpoints for filtering events
-* Return HTML fragments for dynamic updates via HTMX
+Instead use one of:
 
----
+#### Option A: Debounced Trigger (recommended)
 
-## Frontend Approach
+* Upload triggers event
+* Reducer runs after short delay (e.g., 1–2 minutes)
+* Prevents race conditions
 
-Use **server-rendered HTML** instead of a heavy JavaScript framework.
+#### Option B: Scheduled Reducer
 
-Stack:
-
-* Go `html/template`
-* HTMX for dynamic UI updates
+* Reducer runs every N minutes
+* Ignores timing of individual scrapers
 
 ---
 
-## Database
+### 4. Reduce Phase (Fan-In)
 
-Three tables (all timestamps UTC):
+The reducer:
 
-* **events** -- title, description, start/end time, venue, city, category, source, fingerprint
-* **sources** -- registered sources with schedule, retry state, conditional request metadata
-* **scrape_runs** -- audit log of every scrape attempt
+* Reads all relevant raw files for a location
+* Merges datasets
+* Deduplicates events
+* Normalizes fields
+* Outputs final JSON files
 
-Fingerprint field prevents duplicate events via `ON DUPLICATE KEY UPDATE`.
+**Important:**
+
+* Always rebuild from raw
+* Never patch existing processed files
 
 ---
 
-## Key Design Decisions
+## Deduplication Strategy
 
-* Avoid microservices complexity.
-* Two codebases: ingestion (Python) and web (Go). Share a single database.
-* Celery + Redis for task orchestration (retry, backoff, concurrency, per-source scheduling).
-* Keep frontend simple with server rendering.
-* Use AI to normalize unstructured HTML instead of writing fragile per-site parsers.
-* Per-source scheduling (sports every 2 hours, RSS every 6 hours, HTML daily).
-* Full observability via scrape_runs table.
+### Recommended Approach: Content Hash
+
+Generate a deterministic ID using:
+
+```
+(title + start_time + venue)
+```
+
+Fallback:
+
+```
+source + source_id
+```
+
+Future improvement:
+
+* Fuzzy matching (title similarity, time proximity, venue matching)
+
+---
+
+## Processed Output Structure
+
+All processed data is partitioned by location.
+
+```
+/processed/{state}/{city}/
+  index.json
+  by-date/YYYY-MM-DD.json
+  by-id/{event_id}.json
+```
+
+Example:
+
+```
+/processed/nc/raleigh/by-date/2026-03-24.json
+```
+
+---
+
+## Location Strategy
+
+All data is namespaced by:
+
+```
+/state/city
+```
+
+Example:
+
+```
+/processed/nc/raleigh/...
+/processed/nc/durham/...
+```
+
+Benefits:
+
+* No refactor needed for expansion
+* Clean caching boundaries
+* Independent scaling per location
+
+---
+
+## Global Index
+
+Provides discovery across locations:
+
+```
+/events/index.json
+```
+
+Example:
+
+```json
+{
+  "locations": [
+    { "state": "nc", "city": "raleigh" },
+    { "state": "nc", "city": "durham" }
+  ]
+}
+```
+
+---
+
+## Serving Layer
+
+Processed files are served via CDN.
+
+Frontend directly fetches:
+
+```
+/events/locations/nc/raleigh/by-date/2026-03-24.json
+```
+
+No backend API required.
+
+---
+
+## Lambda Usage Strategy
+
+Use serverless functions selectively:
+
+### Good Use Cases
+
+* Scrapers (short-lived)
+* Reducer (if dataset is small)
+* Event triggers
+
+### Avoid
+
+* Long-running jobs
+* Incremental merging logic
+* Complex orchestration early
+
+---
+
+## Anti-Patterns to Avoid
+
+### 1. Incremental Merging
+
+Avoid:
+
+```
+read → append → write
+```
+
+Problems:
+
+* Race conditions
+* Data corruption
+* Duplicate amplification
+
+---
+
+### 2. Single Large Dataset
+
+Avoid:
+
+```
+/events/all.json
+```
+
+Problems:
+
+* Large payloads
+* Poor caching
+* Slow clients
+
+---
+
+### 3. Mixing Locations
+
+Avoid:
+
+```
+/events/by-date/2026-03-24.json
+```
+
+Containing multiple cities.
+
+---
+
+## Scaling Strategy
+
+### Horizontal Scaling
+
+* Add new locations as folders
+* Add new scrapers independently
+
+### Performance Scaling
+
+* Split large datasets into pages if needed
+
+Example:
+
+```
+/by-date/2026-03-24/page-1.json
+```
+
+---
+
+## Failure Handling
+
+* If a scraper fails → reducer still runs
+* Missing data is tolerated
+* Next run corrects it
+
+System remains operational at all times.
+
+---
+
+## Deployment Options
+
+### Phase 1 (Recommended)
+
+* Single scheduled job runs:
+
+  * All scrapers
+  * Reducer
+
+### Phase 2
+
+* Scrapers run independently (Lambda)
+* Reducer runs on schedule or debounce trigger
+
+### Phase 3 (if needed)
+
+* Add workflow orchestration
+
+---
+
+## Mental Model
+
+* Raw data = source code
+* Reducer = compiler
+* Processed data = compiled output
+
+Never edit compiled output directly.
+
+---
+
+## Summary
+
+This architecture:
+
+* Removes the need for a database
+* Eliminates backend APIs
+* Minimizes infrastructure cost
+* Scales cleanly across locations
+* Remains simple to reason about
+
+The key decision is to treat data generation as a **batch compilation step**, not a real-time system.

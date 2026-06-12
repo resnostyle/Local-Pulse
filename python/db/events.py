@@ -81,6 +81,20 @@ def _normalize_datetime(value: Optional[Union[datetime, str]]) -> Optional[datet
     return dt
 
 
+def event_fingerprint(evt: dict) -> Optional[str]:
+    """Return the DB fingerprint for an event dict, or None if insert_events would skip it."""
+    title = evt.get("title", "")
+    start_time = evt.get("start_time")
+    source_url = evt.get("source_url", "")
+    if not title or not start_time:
+        return None
+    start_dt = _normalize_datetime(start_time)
+    if start_dt is None:
+        return None
+    start_str = _format_datetime(start_dt)
+    return compute_fingerprint(title, start_str, source_url)
+
+
 def insert_events(events: list[dict]) -> int:
     """Insert events into the database. Uses ON DUPLICATE KEY UPDATE for fingerprint.
 
@@ -99,20 +113,21 @@ def insert_events(events: list[dict]) -> int:
         inserted = 0
         with conn.cursor() as cur:
             for evt in events:
+                fingerprint = event_fingerprint(evt)
+                if fingerprint is None:
+                    if not evt.get("title") or not evt.get("start_time"):
+                        logger.warning("Skipping event missing title or start_time")
+                    else:
+                        logger.warning(
+                            "Skipping event with unparseable start_time: %r",
+                            evt.get("start_time"),
+                        )
+                    continue
+
+                start_dt = _normalize_datetime(evt.get("start_time"))
                 title = evt.get("title", "")
-                start_time = evt.get("start_time")
-                source_url = evt.get("source_url", "")
-
-                if not title or not start_time:
-                    logger.warning("Skipping event missing title or start_time")
-                    continue
-
-                start_dt = _normalize_datetime(start_time)
-                if start_dt is None:
-                    logger.warning("Skipping event with unparseable start_time: %r", start_time)
-                    continue
                 start_str = _format_datetime(start_dt)
-                fingerprint = compute_fingerprint(title, start_str, source_url)
+                source_url = evt.get("source_url", "")
 
                 end_dt = _normalize_datetime(evt.get("end_time"))
                 end_str = _format_datetime(end_dt) if end_dt else None
