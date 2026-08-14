@@ -13,7 +13,7 @@ COPY . .
 RUN cd go && CGO_ENABLED=0 go build -o /server .
 
 # Runtime stage
-FROM alpine:3.19
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates
 WORKDIR /app
 
