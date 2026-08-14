@@ -48,7 +48,7 @@ celeryBeat:
 
 # Redis - message broker for Celery (deployed in this chart)
 redis:
-  image: redis:7-alpine
+  image: redis:8-alpine
   persistence:
     enabled: false        # Set true for durable storage (recommended for production)
     size: 1Gi
