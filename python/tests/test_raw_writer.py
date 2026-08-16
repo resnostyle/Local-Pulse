@@ -3,7 +3,7 @@
 import json
 from datetime import datetime, timezone
 
-from db.events import event_fingerprint
+from pipeline.fingerprint import event_fingerprint
 from pipeline.raw_writer import build_raw_path, slug_segment, write_raw_run
 
 
@@ -38,7 +38,6 @@ class TestWriteRawRun:
         monkeypatch.setenv("LOCALPULSE_RAW_ROOT", str(tmp_path))
         source = {
             "source": "Test Feed",
-            "id": 7,
             "state": "NC",
             "city": "Raleigh",
         }
@@ -56,7 +55,7 @@ class TestWriteRawRun:
         assert path.exists()
         data = json.loads(path.read_text(encoding="utf-8"))
         assert data["source"] == "Test Feed"
-        assert data["source_id"] == 7
+        assert "source_id" not in data
         assert data["run_at"] == "2026-04-03T12:30:45Z"
         assert len(data["records"]) == 1
         rec = data["records"][0]
@@ -65,7 +64,7 @@ class TestWriteRawRun:
 
     def test_empty_events(self, tmp_path, monkeypatch):
         monkeypatch.setenv("LOCALPULSE_RAW_ROOT", str(tmp_path))
-        source = {"source": "X", "id": 1, "state": "a", "city": "b"}
+        source = {"source": "X", "state": "a", "city": "b"}
         run_at = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
         path = write_raw_run(source, [], run_at=run_at)
         assert path is not None
@@ -74,7 +73,7 @@ class TestWriteRawRun:
 
     def test_skips_events_without_fingerprint(self, tmp_path, monkeypatch):
         monkeypatch.setenv("LOCALPULSE_RAW_ROOT", str(tmp_path))
-        source = {"source": "X", "id": 1}
+        source = {"source": "X"}
         events = [{"title": "", "start_time": "2026-01-01", "source_url": "https://x.com"}]
         run_at = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
         path = write_raw_run(source, events, run_at=run_at)

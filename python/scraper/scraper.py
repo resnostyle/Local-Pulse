@@ -1,7 +1,7 @@
 """Orchestrate scraping from calendar sources."""
 
 import logging
-from typing import Optional, Union
+from typing import Union
 
 from .espn_handler import fetch_espn_events
 from .fetcher import extract_text, fetch_html
@@ -16,8 +16,7 @@ def fetch_events_for_source(source: dict) -> Union[list[dict], dict, None]:
     """Fetch and parse events from a single calendar source.
 
     Args:
-        source: Dict with url, source, type, and optionally id (DB source id
-                for conditional fetch support).
+        source: Dict with url, source, type, and optional location fields.
 
     Returns:
         For type=rss, espn, nmc_json, or ical: list of event dicts (ready to insert).
@@ -27,8 +26,6 @@ def fetch_events_for_source(source: dict) -> Union[list[dict], dict, None]:
     url = source.get("url", "")
     source_name = source.get("source", "Unknown")
     source_type = source.get("type", "html")
-    source_id: Optional[int] = source.get("id")
-
     if source_type == "espn":
         return fetch_espn_events(source_name)
 
@@ -42,7 +39,6 @@ def fetch_events_for_source(source: dict) -> Union[list[dict], dict, None]:
             venue=source.get("venue"),
             city=source.get("city"),
             base_url=source.get("base_url"),
-            source_id=source_id,
         )
 
     if source_type == "nmc_json":
@@ -56,7 +52,6 @@ def fetch_events_for_source(source: dict) -> Union[list[dict], dict, None]:
             city=source.get("city"),
             tz=source.get("tz", "America/New_York"),
             days_ahead=source.get("days_ahead", 90),
-            source_id=source_id,
         )
 
     if not url:
@@ -68,12 +63,11 @@ def fetch_events_for_source(source: dict) -> Union[list[dict], dict, None]:
             url,
             source_name,
             tz=source.get("tz", "America/New_York"),
-            source_id=source_id,
             venue=source.get("venue"),
             city=source.get("city"),
         )
 
-    html = fetch_html(url, source_id=source_id)
+    html = fetch_html(url, source_name=source_name)
     if not html:
         return None
 

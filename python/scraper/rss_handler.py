@@ -229,7 +229,6 @@ def fetch_and_parse(
     url: str,
     source_name: str,
     tz: str = "America/New_York",
-    source_id: int | None = None,
     venue: str | None = None,
     city: str | None = None,
 ) -> list[dict]:
@@ -242,7 +241,6 @@ def fetch_and_parse(
         url: RSS feed URL
         source_name: Human-readable source name
         tz: Timezone for parsing times from detail pages (default America/New_York)
-        source_id: DB source id for conditional fetch metadata
         venue: Default venue name (used when feed doesn't provide one)
         city: Default city name
 
@@ -252,7 +250,12 @@ def fetch_and_parse(
     """
     from .fetcher import fetch_with_conditional
 
-    content = fetch_with_conditional(url, timeout=DEFAULT_TIMEOUT, user_agent=USER_AGENT, source_id=source_id)
+    content = fetch_with_conditional(
+        url,
+        timeout=DEFAULT_TIMEOUT,
+        user_agent=USER_AGENT,
+        source_name=source_name,
+    )
     if content is None:
         return []
 

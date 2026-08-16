@@ -1,44 +1,28 @@
 [tools]
 python = "3.11"
-go = "1.21"
 
 [env]
 _.file = ".env"
 
 [tasks.setup]
-description = "Copy example configs if missing, install Python and Go deps"
+description = "Copy example configs if missing, install Python deps"
 run = """
 if [ ! -f .env ]; then cp .env.example .env && echo "Created .env from .env.example"; fi
 if [ ! -f python/config/calendars.yaml ] && [ -f python/config/calendars.yaml.example ]; then cp python/config/calendars.yaml.example python/config/calendars.yaml && echo "Created calendars.yaml from example"; fi
 if [ ! -f python/config/espn.yaml ] && [ -f python/config/espn.yaml.example ]; then cp python/config/espn.yaml.example python/config/espn.yaml && echo "Created espn.yaml from example"; fi
 cd python && pip install -r requirements.txt
-cd ../go && go mod tidy
 """
 
-[tasks.db-up]
-description = "Start MySQL via Docker Compose"
-run = "docker compose up -d"
+[tasks.ingest]
+description = "Run one ingest pass locally (writes to LOCALPULSE_DATA_ROOT)"
+run = "cd python && python main.py run --force"
 
-[tasks.db-down]
-description = "Stop MySQL"
-run = "docker compose down"
-
-[tasks.db-schema]
-description = "Load database schema into MySQL"
-run = "cat schema/init.sql | docker compose exec -T mysql mysql -u localpulse -plocalpulse localpulse"
-
-[tasks.db-init]
-description = "Start MySQL and load schema (db-up + db-schema)"
-run = """
-docker compose up -d
-echo "Waiting for MySQL to be ready..."
-sleep 5
-cat schema/init.sql | docker compose exec -T mysql mysql -u localpulse -plocalpulse localpulse
-echo "Database ready."
-"""
+[tasks.ingest-docker]
+description = "Run ingest via Docker Compose"
+run = "docker compose run --rm ingest"
 
 [tasks.python]
-description = "Run Python ingestion service (one-shot). Use: cd python && python main.py run [--only SOURCE] [--force]"
+description = "Run Python ingestion (scrape due sources). Use --force to ignore intervals."
 run = "cd python && python main.py run"
 
 [tasks.python-install]
@@ -48,11 +32,3 @@ run = "cd python && pip install -r requirements.txt"
 [tasks.python-test]
 description = "Run Python unit tests"
 run = "cd python && python -m pytest tests/ -v"
-
-[tasks.go]
-description = "Run Go web server"
-run = "cd go && go run ."
-
-[tasks.go-build]
-description = "Build Go binary"
-run = "cd go && go build -o bin/server ."

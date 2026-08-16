@@ -4,26 +4,20 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from db.events import event_fingerprint
+from pipeline.fingerprint import event_fingerprint
+from pipeline.paths import raw_root as _data_raw_root
 
 logger = logging.getLogger(__name__)
 
 
 def _raw_root() -> Path:
-    """Root directory for raw runs. Default: ./raw under cwd.
-
-    Set LOCALPULSE_RAW_ROOT or RAW_OUTPUT_ROOT to override.
-    """
-    root = os.environ.get("LOCALPULSE_RAW_ROOT") or os.environ.get("RAW_OUTPUT_ROOT")
-    if root:
-        return Path(root).expanduser().resolve()
-    return Path.cwd() / "raw"
+    """Root directory for raw runs under LOCALPULSE_DATA_ROOT/raw by default."""
+    return _data_raw_root()
 
 
 def slug_segment(value: str | None) -> str:
@@ -105,7 +99,6 @@ def write_raw_run(
     payload = {
         "run_at": when.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "source": source_label,
-        "source_id": source.get("id"),
         "records": _records_with_hashes(events),
     }
 

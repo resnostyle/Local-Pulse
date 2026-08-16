@@ -1,1 +1,1 @@
-"""Pipeline helpers (raw storage, future reducer hooks)."""
+"""Pipeline helpers: raw storage, meta state, reducer, YAML sources."""

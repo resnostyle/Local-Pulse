@@ -74,7 +74,6 @@ def fetch_nmc_json_events(
     city: str | None = "Cary",
     tz: str = "America/New_York",
     days_ahead: int = DEFAULT_DAYS_AHEAD,
-    source_id: int | None = None,
 ) -> list[dict]:
     """Fetch events from NMC-style JSON API.
 
@@ -110,7 +109,12 @@ def fetch_nmc_json_events(
 
     from .fetcher import fetch_with_conditional
 
-    content = fetch_with_conditional(url, timeout=DEFAULT_TIMEOUT, user_agent=USER_AGENT, source_id=source_id)
+    content = fetch_with_conditional(
+        url,
+        timeout=DEFAULT_TIMEOUT,
+        user_agent=USER_AGENT,
+        source_name=source_name,
+    )
     if content is None:
         return []
 

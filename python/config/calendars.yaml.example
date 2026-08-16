@@ -1,13 +1,14 @@
 # Source definitions for the ingestion pipeline.
-# Copy this file to calendars.yaml and customise for your deployment.
+# Copy this file to calendars.yaml and customize for your deployment.
 #
-# Each entry becomes a row in the `sources` table after `python main.py sync`.
+# Each entry is loaded by the JSON pipeline (see python/main.py run).
 #
 # Fields:
-#   source            - Human-readable name (unique key in DB)
+#   source            - Human-readable name (unique)
 #   type              - Handler: espn | rss | ical | nmc_json | html
 #   url               - Feed / page URL (not needed for espn)
 #   interval_minutes  - How often to scrape (default 360)
+#   state, city       - Location for raw/events paths (e.g. nc, raleigh)
 #   Any extra keys are stored as JSON in the sources.config column and
 #   forwarded to the handler (e.g. venue, city, tz, base_url, days_ahead).
 
