@@ -1,0 +1,113 @@
+# Terraform jobs — plan on MR/main, auto-apply on default branch.
+# Secrets: HashiCorp Vault via GitLab `secrets:` + ID tokens (see docs/VAULT.md).
+
+.terraform_image:
+  image:
+    name: hashicorp/terraform:1.8
+    entrypoint: [""]
+
+.terraform_vars:
+  variables:
+    TF_ROOT: "${CI_PROJECT_DIR}/terraform"
+    TF_IN_AUTOMATION: "true"
+    TF_INPUT: "false"
+    # GitLab-managed Terraform state (HTTP backend)
+    TF_HTTP_ADDRESS: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/terraform/state/localpulse"
+    TF_HTTP_LOCK_ADDRESS: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/terraform/state/localpulse/lock"
+    TF_HTTP_UNLOCK_ADDRESS: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/terraform/state/localpulse/lock"
+    TF_HTTP_USERNAME: "gitlab-ci-token"
+    TF_HTTP_PASSWORD: "${CI_JOB_TOKEN}"
+    TF_HTTP_LOCK_METHOD: "POST"
+    TF_HTTP_UNLOCK_METHOD: "DELETE"
+    TF_HTTP_RETRY_WAIT_MIN: "5"
+    # Non-secret Terraform inputs — override in GitLab CI/CD settings if needed
+    TF_VAR_bucket_name: "localpulse-data"
+    TF_VAR_bucket_location: "ENAM"
+    # TF_VAR_cloudflare_account_id — set in GitLab CI/CD (Settings → Variables)
+    # TF_VAR_events_custom_domain — optional
+    # TF_VAR_cloudflare_zone_id — optional when using custom domain
+
+.terraform_vault:
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: ${VAULT_ADDR}
+  secrets:
+    TF_VAR_cloudflare_api_token:
+      vault: ${VAULT_TERRAFORM_CLOUDFLARE_TOKEN_PATH}
+      file: false
+
+.terraform_rules:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - terraform/**/*
+        - .gitlab/ci/**/*
+        - .gitlab-ci.yml
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - terraform/**/*
+        - .gitlab/ci/**/*
+        - .gitlab-ci.yml
+
+.terraform_init:
+  before_script:
+    - cd "${TF_ROOT}"
+    - terraform init -input=false
+
+terraform:validate:
+  extends:
+    - .terraform_image
+    - .terraform_vars
+    - .terraform_vault
+    - .terraform_rules
+    - .terraform_init
+  stage: validate
+  script:
+    - terraform validate
+
+terraform:plan:
+  extends:
+    - .terraform_image
+    - .terraform_vars
+    - .terraform_vault
+    - .terraform_rules
+    - .terraform_init
+  stage: plan
+  script:
+    - terraform plan -input=false -out=plan.cache
+  artifacts:
+    name: terraform-plan
+    paths:
+      - terraform/plan.cache
+    expire_in: 7 days
+
+terraform:apply:
+  extends:
+    - .terraform_image
+    - .terraform_vars
+    - .terraform_vault
+    - .terraform_init
+  stage: apply
+  needs:
+    - job: terraform:plan
+      artifacts: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - terraform/**/*
+        - .gitlab/ci/**/*
+        - .gitlab-ci.yml
+  script:
+    - terraform apply -input=false -auto-approve plan.cache
+    - |
+      cd "${TF_ROOT}"
+      echo "R2_BUCKET=$(terraform output -raw bucket_name)" >> "${CI_PROJECT_DIR}/terraform.env"
+      echo "R2_ENDPOINT=$(terraform output -raw r2_endpoint)" >> "${CI_PROJECT_DIR}/terraform.env"
+      EVENTS_BASE=$(terraform output -raw events_base_url 2>/dev/null || true)
+      if [ -n "$EVENTS_BASE" ] && [ "$EVENTS_BASE" != "null" ]; then
+        echo "VITE_EVENTS_BASE=${EVENTS_BASE}" >> "${CI_PROJECT_DIR}/terraform.env"
+      fi
+  artifacts:
+    reports:
+      dotenv: terraform.env
+    expire_in: 30 days

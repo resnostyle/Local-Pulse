@@ -4,20 +4,23 @@ Aggregates local events from multiple websites into a single browsable calendar.
 
 ## How It Works
 
-Sources are defined in `python/config/calendars.yaml`. A scheduled **GitLab pipeline** runs every few hours: Python scrapers fetch each source, append **raw JSON** runs, a **reducer** rebuilds public **events JSON**, and the files sync to **Cloudflare R2**. A **React** app on GitLab Pages reads event data from the CDN.
+Sources are defined in `python/config/calendars.yaml`. A scheduled **GitLab pipeline** runs every few hours: Python scrapers fetch each source, append **raw JSON** runs, a **reducer** rebuilds public **events JSON**, and the files sync to **Cloudflare R2**. A **React** app is hosted on **GitLab Pages** and served to users through **Cloudflare CDN**, which also fronts the events JSON subdomain.
 
 ```
 calendars.yaml
       |
       v
-GitLab scheduled job (every 2–4h)
+GitLab scheduled job (every 3h)
       |
       +--> scrape --> data/raw/...        (private, append-only)
       +--> meta   --> data/meta/sources/  (ETag, schedule state)
       +--> reduce --> data/events/...     (public compiled JSON)
       |
       v
-Cloudflare R2 + CDN  <-----  React (GitLab Pages)
+Cloudflare R2 (events subdomain)
+      ^
+      | fetch JSON
+Cloudflare CDN ──> GitLab Pages (React SPA)
 ```
 
 See [docs/DEPLOY.md](docs/DEPLOY.md) for R2, GitLab schedules, and local dev. See [docs/INTEGRATION.md](docs/INTEGRATION.md) for the JSON file contract.

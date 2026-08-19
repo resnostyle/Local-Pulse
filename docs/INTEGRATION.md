@@ -8,14 +8,17 @@ This document describes the JSON file contract between the **Python ingestion pi
 calendars.yaml
       |
       v
-Python scrapers (GitLab CI or local)
+Python scrapers (GitLab CI schedule or local)
       |
       +--> data/raw/           append-only scrape runs
       +--> data/meta/sources/  per-source schedule + HTTP cache state
       +--> data/events/        compiled public JSON
       |
       v
-Cloudflare R2 + CDN  <-----  React (GitLab Pages)
+Cloudflare R2 (events subdomain)
+      ^
+      | GET JSON
+Cloudflare CDN ──> GitLab Pages (React)
 ```
 
 There is no database. The React app reads static JSON over HTTP.

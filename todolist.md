@@ -1,6 +1,6 @@
 # Local Pulse — Task List
 
-**Target:** GitLab Runners + Cloudflare R2 + CDN + React  
+**Target:** GitLab pipeline + GitLab Pages + Cloudflare CDN + R2  
 **Deploy:** [docs/DEPLOY.md](docs/DEPLOY.md)
 
 ---
@@ -18,28 +18,34 @@
 - [x] **React frontend** (`frontend/`) — location + date picker
 - [x] **Terraform** for R2 + GitLab auto-apply on main
 - [x] **Removed MySQL / Celery / Redis** — no migration (app never deployed)
+- [x] **Deployment docs** — GitLab workers, GitLab Pages origin, Cloudflare CDN edge
 
 ---
 
 ## Manual setup (you)
 
-- [ ] Create Cloudflare R2 bucket + API token
+- [ ] Terraform apply → R2 bucket + `events.yourdomain.com`
 - [ ] Configure Vault paths for Terraform + ingest ([docs/VAULT.md](docs/VAULT.md))
-- [ ] Set GitLab CI/CD variables (`R2_*`, `OPENAI_API_KEY`)
+- [ ] Set GitLab CI/CD variables (`R2_*`, `VITE_EVENTS_BASE`, `TF_VAR_*`)
+- [ ] Commit `python/config/calendars.yaml` with your sources
 - [ ] Add GitLab pipeline schedule (`0 */3 * * *`)
-- [ ] Configure CDN custom domain for `events/` JSON
-- [ ] Set `VITE_EVENTS_BASE` in GitLab Pages build to CDN URL
+- [ ] Cloudflare DNS: proxy app domain → GitLab Pages ([docs/DEPLOY.md](docs/DEPLOY.md))
+- [ ] Verify events subdomain is proxied to R2
 
 ---
 
 ## Optional / later
 
 - [ ] `meta/runs/` audit JSON for scrape history
+- [ ] Same-origin `/events/*` via Cloudflare Worker (eliminates CORS)
+- [ ] GitLab matrix fan-out for per-source parallel scrape (before Lambda)
 
 ---
 
 ## Decisions locked in
 
 - JSON is the event datastore; public paths: `events/locations/{state}/{city}/by-date/…`
-- Batch via **GitLab scheduled pipeline** + **R2** persistence between runs
-- No MySQL, Celery, or Redis in the deployment path
+- **Workers:** GitLab scheduled pipeline + R2 persistence between runs
+- **Site origin:** GitLab Pages (React SPA)
+- **CDN edge:** Cloudflare proxied in front of Pages + R2 events domain
+- No MySQL, Celery, Redis, or Lambda in v1

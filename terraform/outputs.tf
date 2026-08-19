@@ -49,9 +49,9 @@ output "manual_steps" {
   value       = <<-EOT
     1. Create an R2 S3 API token (Dashboard → R2 → Manage R2 API Tokens).
        Scope: Object Read & Write on bucket "${cloudflare_r2_bucket.data.name}".
-       Set GitLab CI variables R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY (masked).
-    2. Set GitLab CI variables R2_BUCKET and R2_ENDPOINT from terraform outputs.
-    3. Set VITE_EVENTS_BASE in GitLab CI (or .gitlab-ci.yml) from events_base_url output.
-    4. Add GitLab pipeline schedule: 0 */3 * * *
+       Store credentials in Vault (see docs/VAULT.md).
+    2. Set GitLab CI variables R2_BUCKET, R2_ENDPOINT, and VITE_EVENTS_BASE from terraform outputs.
+    3. Add GitLab pipeline schedule: 0 */3 * * *
+    4. Configure Cloudflare DNS: proxy app domain CNAME to GitLab Pages (see docs/DEPLOY.md).
   EOT
 }
