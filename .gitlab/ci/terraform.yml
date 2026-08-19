@@ -99,15 +99,36 @@ terraform:apply:
         - .gitlab-ci.yml
   script:
     - terraform apply -input=false -auto-approve plan.cache
+
+# Export R2 bucket / events URL for pages on main pushes (reads remote state, no apply).
+.terraform_dotenv_script:
+  script:
     - |
       cd "${TF_ROOT}"
-      echo "R2_BUCKET=$(terraform output -raw bucket_name)" >> "${CI_PROJECT_DIR}/terraform.env"
-      echo "R2_ENDPOINT=$(terraform output -raw r2_endpoint)" >> "${CI_PROJECT_DIR}/terraform.env"
-      EVENTS_BASE=$(terraform output -raw events_base_url 2>/dev/null || true)
-      if [ -n "$EVENTS_BASE" ] && [ "$EVENTS_BASE" != "null" ]; then
-        echo "VITE_EVENTS_BASE=${EVENTS_BASE}" >> "${CI_PROJECT_DIR}/terraform.env"
-      fi
+      {
+        echo "R2_BUCKET=$(terraform output -raw bucket_name)"
+        echo "R2_ENDPOINT=$(terraform output -raw r2_endpoint)"
+        EVENTS_BASE=$(terraform output -raw events_base_url 2>/dev/null || true)
+        if [ -n "$EVENTS_BASE" ] && [ "$EVENTS_BASE" != "null" ]; then
+          echo "VITE_EVENTS_BASE=${EVENTS_BASE}"
+        fi
+      } > "${CI_PROJECT_DIR}/terraform.env"
+      cat "${CI_PROJECT_DIR}/terraform.env"
+
+terraform:dotenv:
+  extends:
+    - .terraform_image
+    - .terraform_vars
+    - .terraform_vault
+    - .terraform_init
+  stage: apply
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "web"
+  script:
+    - !reference [.terraform_dotenv_script, script]
   artifacts:
     reports:
       dotenv: terraform.env
     expire_in: 30 days
+  allow_failure: true

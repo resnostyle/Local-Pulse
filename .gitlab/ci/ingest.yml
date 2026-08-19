@@ -1,0 +1,83 @@
+# Scheduled / manual scrape → reduce → R2 sync.
+
+.ingest_setup:
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq awscli
+    - |
+      if [ ! -f python/config/calendars.yaml ]; then
+        cp python/config/calendars.yaml.example python/config/calendars.yaml
+      fi
+    - cd python && pip install -q -r requirements.txt
+    - mkdir -p "$LOCALPULSE_DATA_ROOT/meta" "$LOCALPULSE_DATA_ROOT/raw" "$LOCALPULSE_DATA_ROOT/events"
+    - |
+      if [ "$CI_PIPELINE_SOURCE" = "schedule" ] || [ "$RUN_INGEST" = "true" ]; then
+        missing=""
+        [ -z "$R2_BUCKET" ] && missing="${missing} R2_BUCKET"
+        [ -z "$R2_ENDPOINT" ] && missing="${missing} R2_ENDPOINT"
+        [ -z "$R2_ACCESS_KEY_ID" ] && missing="${missing} R2_ACCESS_KEY_ID"
+        [ -z "$R2_SECRET_ACCESS_KEY" ] && missing="${missing} R2_SECRET_ACCESS_KEY"
+        if [ -n "$missing" ]; then
+          echo "ERROR: Missing required variables:${missing}"
+          echo "Set R2_BUCKET and R2_ENDPOINT in CI/CD variables (terraform output)."
+          echo "Store R2 credentials in Vault — see docs/VAULT.md."
+          exit 1
+        fi
+      fi
+    - |
+      if [ -n "$R2_BUCKET" ] && [ -n "$R2_ENDPOINT" ]; then
+        export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
+        export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
+        echo "Pulling meta/ and raw/ from s3://${R2_BUCKET}..."
+        aws s3 sync "s3://${R2_BUCKET}/meta/" "$LOCALPULSE_DATA_ROOT/meta/" \
+          --endpoint-url "$R2_ENDPOINT" || true
+        aws s3 sync "s3://${R2_BUCKET}/raw/" "$LOCALPULSE_DATA_ROOT/raw/" \
+          --endpoint-url "$R2_ENDPOINT" || true
+      else
+        echo "R2_BUCKET/R2_ENDPOINT not set — running without remote state (local meta/raw only)."
+      fi
+
+ingest:pipeline:
+  extends:
+    - .python_job
+    - .ingest_vault
+    - .ingest_setup
+  stage: ingest
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web" && $RUN_INGEST == "true"
+  script:
+    - |
+      cd python
+      if [ "$RUN_INGEST_FORCE" = "true" ]; then
+        echo "Running full scrape (--force)..."
+        python main.py run --force
+      else
+        echo "Running scrape for due sources..."
+        python main.py run
+      fi
+    - |
+      if [ -n "$R2_BUCKET" ] && [ -n "$R2_ENDPOINT" ]; then
+        export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
+        export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
+        echo "Pushing meta/ and raw/ to s3://${R2_BUCKET}..."
+        aws s3 sync "$LOCALPULSE_DATA_ROOT/meta/" "s3://${R2_BUCKET}/meta/" \
+          --endpoint-url "$R2_ENDPOINT"
+        aws s3 sync "$LOCALPULSE_DATA_ROOT/raw/" "s3://${R2_BUCKET}/raw/" \
+          --endpoint-url "$R2_ENDPOINT"
+        echo "Pushing events/ to s3://${R2_BUCKET} (removing stale objects)..."
+        aws s3 sync "$LOCALPULSE_DATA_ROOT/events/" "s3://${R2_BUCKET}/events/" \
+          --endpoint-url "$R2_ENDPOINT" \
+          --delete
+        echo "R2 sync complete."
+      fi
+    - |
+      if [ ! -f "$LOCALPULSE_DATA_ROOT/events/index.json" ]; then
+        echo "WARNING: events/index.json was not produced — check calendars.yaml sources."
+        exit 1
+      fi
+      echo "Compiled $(find "$LOCALPULSE_DATA_ROOT/events" -name '*.json' | wc -l) event JSON file(s)."
+  artifacts:
+    when: on_success
+    paths:
+      - data/events/
+    expire_in: 7 days
