@@ -96,7 +96,6 @@ def fetch_ical_events(
     venue: Optional[str] = None,
     city: Optional[str] = None,
     base_url: Optional[str] = None,
-    source_id: Optional[int] = None,
 ) -> list[dict]:
     """Fetch iCal feed and return event dicts.
 
@@ -106,14 +105,18 @@ def fetch_ical_events(
         venue: Default venue (overridden by LOCATION if present)
         city: Default city
         base_url: Base URL for building event links (e.g. https://example.com)
-        source_id: DB source id for conditional fetch metadata
 
     Returns:
         List of event dicts ready for insert.
     """
     from .fetcher import fetch_with_conditional
 
-    ics_text = fetch_with_conditional(url, timeout=DEFAULT_TIMEOUT, user_agent=USER_AGENT, source_id=source_id)
+    ics_text = fetch_with_conditional(
+        url,
+        timeout=DEFAULT_TIMEOUT,
+        user_agent=USER_AGENT,
+        source_name=source_name,
+    )
     if ics_text is None:
         return []
 

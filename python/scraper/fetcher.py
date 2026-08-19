@@ -23,29 +23,26 @@ def fetch_with_conditional(
     url: str,
     timeout: int = DEFAULT_TIMEOUT,
     user_agent: str = USER_AGENT,
-    source_id: Optional[int] = None,
+    source_name: Optional[str] = None,
 ) -> Optional[str]:
-    """Fetch URL with HTTP conditional request (ETag/Last-Modified).
-
-    If source_id is provided, reads/writes ETag and Last-Modified from the
-    sources table. Otherwise falls back to a plain GET.
+    """Fetch URL with optional ETag/Last-Modified from meta/sources JSON.
 
     Returns response body as str, or None if 304 or on error.
     """
     headers = {"User-Agent": user_agent}
 
-    if source_id is not None:
+    if source_name:
         try:
-            from db.sources import get_fetch_metadata
+            from pipeline.meta import get_fetch_metadata
 
-            stored = get_fetch_metadata(source_id)
+            stored = get_fetch_metadata(source_name)
             if stored:
                 if stored.get("etag"):
                     headers["If-None-Match"] = stored["etag"]
                 if stored.get("last_modified"):
                     headers["If-Modified-Since"] = stored["last_modified"]
         except Exception as e:
-            logger.debug("Could not load fetch metadata for source %s: %s", source_id, e)
+            logger.debug("Could not load fetch metadata for %s: %s", source_name, e)
 
     try:
         resp = requests.get(url, timeout=timeout, headers=headers)
@@ -54,14 +51,14 @@ def fetch_with_conditional(
             return None
         resp.raise_for_status()
 
-        if source_id is not None:
+        if source_name:
             etag = resp.headers.get("ETag")
             last_modified = resp.headers.get("Last-Modified")
             if etag or last_modified:
                 try:
-                    from db.sources import set_fetch_metadata
+                    from pipeline.meta import set_fetch_metadata
 
-                    set_fetch_metadata(source_id, etag, last_modified)
+                    set_fetch_metadata(source_name, etag, last_modified)
                 except Exception as e:
                     logger.debug("Could not save fetch metadata: %s", e)
 
@@ -71,12 +68,15 @@ def fetch_with_conditional(
         return None
 
 
-def fetch_html(url: str, timeout: int = DEFAULT_TIMEOUT, source_id: Optional[int] = None) -> Optional[str]:
-    """Fetch raw HTML from a URL.
-
-    Uses conditional fetch (ETag/Last-Modified) when source_id is provided.
-    """
-    return fetch_with_conditional(url, timeout=timeout, user_agent=USER_AGENT, source_id=source_id)
+def fetch_html(
+    url: str,
+    timeout: int = DEFAULT_TIMEOUT,
+    source_name: Optional[str] = None,
+) -> Optional[str]:
+    """Fetch raw HTML from a URL with optional conditional headers."""
+    return fetch_with_conditional(
+        url, timeout=timeout, user_agent=USER_AGENT, source_name=source_name
+    )
 
 
 def extract_text(html: str) -> str:

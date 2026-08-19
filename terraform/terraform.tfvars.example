@@ -1,0 +1,21 @@
+# Copy to terraform.tfvars and fill in values.
+# Do not commit terraform.tfvars (gitignored).
+
+cloudflare_account_id = "your-cloudflare-account-id"
+
+# Create a token at https://dash.cloudflare.com/profile/api-tokens
+# Permissions: Account → Workers R2 Storage → Edit
+# cloudflare_api_token = "..."  # prefer: export TF_VAR_cloudflare_api_token=...
+
+bucket_name     = "localpulse-data"
+bucket_location = "ENAM"
+
+# Public events CDN (optional — requires domain on Cloudflare)
+# events_custom_domain = "events.example.com"
+# cloudflare_zone_id     = "your-zone-id"
+
+# Quick test without custom domain (exposes bucket via r2.dev — dev only)
+enable_r2_dev_domain = false
+
+# Restrict in production, e.g. ["https://yourgroup.gitlab.io"]
+cors_allowed_origins = ["*"]
