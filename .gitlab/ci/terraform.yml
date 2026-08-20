@@ -3,7 +3,7 @@
 
 .terraform_image:
   image:
-    name: hashicorp/terraform:1.8
+    name: hashicorp/terraform:1.15
     entrypoint: [""]
 
 .terraform_vars:
