@@ -5,23 +5,32 @@
 # Events:   R2 custom domain — proxied via Cloudflare CDN (see docs/DEPLOY.md)
 #
 # Required GitLab CI/CD variables (non-secret):
-#   VAULT_ADDR                          e.g. https://vault.example.com
-#   VAULT_TERRAFORM_CLOUDFLARE_TOKEN_PATH  e.g. localpulse/terraform/cloudflare_api_token@secret
-#   VAULT_OPENAI_API_KEY_PATH           e.g. localpulse/openai/api_key@secret
-#   VAULT_R2_ACCESS_KEY_ID_PATH         e.g. localpulse/r2/access_key_id@secret
-#   VAULT_R2_SECRET_ACCESS_KEY_PATH     e.g. localpulse/r2/secret_access_key@secret
+#   VAULT_ADDR
 #   TF_VAR_cloudflare_account_id
 #   TF_VAR_events_custom_domain         e.g. events.example.com
 #   TF_VAR_cloudflare_zone_id           required when events_custom_domain is set
-#   VITE_EVENTS_BASE                    e.g. https://events.example.com/events
 #
-# R2_BUCKET / R2_ENDPOINT: set after first terraform apply (terraform output or terraform.env)
+# Optional overrides (otherwise from terraform:dotenv on main, or set manually):
+#   R2_BUCKET, R2_ENDPOINT, VITE_EVENTS_BASE
+#
+# Vault paths (defaults below): Cloudflare token, R2 keys, OpenAI key — see docs/VAULT.md
+#
 # Schedule ingest: CI/CD → Schedules → 0 */3 * * *
-# Manual force ingest: run pipeline with RUN_INGEST=true and RUN_INGEST_FORCE=true
+# Manual ingest:   run pipeline with RUN_INGEST=true
+# Force all sources: add RUN_INGEST_FORCE=true
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
 
 include:
   - local: .gitlab/ci/terraform.yml
   - local: .gitlab/ci/vault-secrets.yml
+  - local: .gitlab/ci/ingest.yml
+  - local: .gitlab/ci/pages.yml
 
 stages:
   - test
@@ -34,7 +43,6 @@ stages:
 variables:
   LOCALPULSE_DATA_ROOT: "$CI_PROJECT_DIR/data"
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-  # Vault secret path defaults (override in GitLab CI/CD settings)
   VAULT_TERRAFORM_CLOUDFLARE_TOKEN_PATH: "localpulse/terraform/cloudflare_api_token@secret"
   VAULT_OPENAI_API_KEY_PATH: "localpulse/openai/api_key@secret"
   VAULT_R2_ACCESS_KEY_ID_PATH: "localpulse/r2/access_key_id@secret"
@@ -47,6 +55,10 @@ variables:
     paths:
       - .cache/pip
   before_script:
+    - |
+      if [ ! -f python/config/calendars.yaml ]; then
+        cp python/config/calendars.yaml.example python/config/calendars.yaml
+      fi
     - cd python && pip install -q -r requirements.txt
 
 test:python:
@@ -56,66 +68,4 @@ test:python:
     - cd python && python -m pytest tests/ -q
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
-ingest:pipeline:
-  extends:
-    - .python_job
-    - .ingest_vault
-  stage: ingest
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-    - if: $CI_PIPELINE_SOURCE == "web" && $RUN_INGEST == "true"
-  before_script:
-    - apt-get update -qq && apt-get install -y -qq awscli
-    - |
-      if [ ! -f python/config/calendars.yaml ]; then
-        cp python/config/calendars.yaml.example python/config/calendars.yaml
-      fi
-    - cd python && pip install -q -r requirements.txt
-    - mkdir -p "$LOCALPULSE_DATA_ROOT/meta" "$LOCALPULSE_DATA_ROOT/raw" "$LOCALPULSE_DATA_ROOT/events"
-    - |
-      if [ -n "$R2_BUCKET" ] && [ -n "$R2_ENDPOINT" ]; then
-        export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
-        export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
-        aws s3 sync "s3://${R2_BUCKET}/meta/" "$LOCALPULSE_DATA_ROOT/meta/" \
-          --endpoint-url "$R2_ENDPOINT" || true
-        aws s3 sync "s3://${R2_BUCKET}/raw/" "$LOCALPULSE_DATA_ROOT/raw/" \
-          --endpoint-url "$R2_ENDPOINT" || true
-      fi
-  script:
-    - |
-      cd python
-      if [ "$RUN_INGEST_FORCE" = "true" ]; then
-        python main.py run --force
-      else
-        python main.py run
-      fi
-    - |
-      if [ -n "$R2_BUCKET" ] && [ -n "$R2_ENDPOINT" ]; then
-        export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
-        export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
-        aws s3 sync "$LOCALPULSE_DATA_ROOT/meta/" "s3://${R2_BUCKET}/meta/" --endpoint-url "$R2_ENDPOINT"
-        aws s3 sync "$LOCALPULSE_DATA_ROOT/raw/" "s3://${R2_BUCKET}/raw/" --endpoint-url "$R2_ENDPOINT"
-        aws s3 sync "$LOCALPULSE_DATA_ROOT/events/" "s3://${R2_BUCKET}/events/" --endpoint-url "$R2_ENDPOINT"
-      fi
-  artifacts:
-    when: on_success
-    paths:
-      - data/events/
-    expire_in: 7 days
-
-pages:
-  stage: pages
-  image: node:20-alpine
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-  variables:
-    # Set in GitLab CI/CD after terraform apply — e.g. https://events.example.com/events
-    VITE_EVENTS_BASE: "${VITE_EVENTS_BASE:-/events}"
-  script:
-    - cd frontend && npm ci && npm run build
-    - mv frontend/dist public
-  artifacts:
-    paths:
-      - public
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"

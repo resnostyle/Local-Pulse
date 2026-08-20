@@ -97,14 +97,18 @@ Scope policies per environment (`localpulse/staging/*` vs `localpulse/production
 ## 5. Pipeline behaviour
 
 ```
-MR / main (terraform/** changed)
-  validate → plan (artifact: plan.cache)
+push / MR
+  test:python (+ test:frontend when frontend/ changes)
+  terraform validate/plan/apply (when terraform/ changes)
+  terraform:dotenv (main push only → R2_BUCKET, R2_ENDPOINT, VITE_EVENTS_BASE)
+  pages (main push only → GitLab Pages build)
 
-main only
-  apply (auto-approve plan.cache) → writes terraform.env dotenv (R2_BUCKET, R2_ENDPOINT, VITE_EVENTS_BASE)
+schedule (0 */3 * * *)
+  ingest:pipeline only (Vault R2 + OpenAI secrets)
 
-schedule
-  ingest:pipeline (Vault R2 + OpenAI secrets)
+web (manual)
+  RUN_INGEST=true  → ingest:pipeline
+  RUN_INGEST_FORCE=true → scrape all sources, ignore intervals
 ```
 
 **Apply is automatic on the default branch** when Terraform files change. There is no manual approval gate.

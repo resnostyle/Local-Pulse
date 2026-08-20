@@ -1,0 +1,48 @@
+# GitLab Pages — React SPA built with VITE_EVENTS_BASE from CI or terraform dotenv.
+
+.node_cache:
+  cache:
+    key: npm-$CI_COMMIT_REF_SLUG
+    paths:
+      - frontend/node_modules/
+
+test:frontend:
+  extends: .node_cache
+  stage: test
+  image: node:20-alpine
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - frontend/**/*
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - frontend/**/*
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+  script:
+    - cd frontend && npm ci
+    - npm run build
+  variables:
+    VITE_EVENTS_BASE: "${VITE_EVENTS_BASE:-/events}"
+
+pages:
+  extends: .node_cache
+  stage: pages
+  image: node:20-alpine
+  needs:
+    - job: terraform:dotenv
+      optional: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "web"
+  variables:
+    VITE_EVENTS_BASE: "${VITE_EVENTS_BASE:-/events}"
+  script:
+    - echo "Building with VITE_EVENTS_BASE=${VITE_EVENTS_BASE}"
+    - cd frontend && npm ci && npm run build
+    - mv frontend/dist public
+  artifacts:
+    paths:
+      - public
