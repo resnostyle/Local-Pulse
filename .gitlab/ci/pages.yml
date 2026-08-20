@@ -9,7 +9,7 @@
 test:frontend:
   extends: .node_cache
   stage: test
-  image: node:20-alpine
+  image: node:26-alpine
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
@@ -30,7 +30,7 @@ test:frontend:
 pages:
   extends: .node_cache
   stage: pages
-  image: node:20-alpine
+  image: node:26-alpine
   needs:
     - job: terraform:dotenv
       optional: true
